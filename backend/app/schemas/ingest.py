@@ -5,8 +5,6 @@ from pydantic import BaseModel, Field
 
 
 class HostIn(BaseModel):
-    """Сервер и его метрики."""
-
     name: str
     ip: Optional[str] = None
     status: Optional[str] = None  
