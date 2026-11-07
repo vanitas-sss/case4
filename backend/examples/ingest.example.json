@@ -1,0 +1,38 @@
+[
+  {
+    "schema_version": "1.0",
+    "source_id": "lab-01",
+    "timestamp": "2026-11-06T12:00:00Z",
+    "host": {
+      "name": "server-01",
+      "ip": "192.168.1.10",
+      "status": "online",
+      "cpu_percent": 42.5,
+      "memory_percent": 61.2,
+      "disk_percent": 48.1,
+      "net_rx_bytes": 1048576,
+      "net_tx_bytes": 524288
+    },
+    "containers": [
+      {
+        "id": "c1",
+        "name": "frontend",
+        "image": "nginx:1.27",
+        "status": "running",
+        "ip": "172.20.0.2",
+        "networks": ["app-net"]
+      }
+    ],
+    "network": {
+      "nodes": [
+        {"id": "server-01", "label": "Server 01", "type": "server"},
+        {"id": "frontend", "label": "frontend", "type": "container"},
+        {"id": "app-net", "label": "app-net", "type": "network"}
+      ],
+      "links": [
+        {"source": "server-01", "target": "frontend", "type": "host", "load": 10},
+        {"source": "frontend", "target": "app-net", "type": "network", "load": 35}
+      ]
+    }
+  }
+]
