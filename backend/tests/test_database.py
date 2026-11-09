@@ -1,16 +1,26 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from app.db.base import Base
-from app.models import Alert, AvailabilityCheck, Container, Event, Host, Metric, NetworkLink, NetworkNode
+from app.models import (
+    Alert,
+    AvailabilityCheck,
+    Container,
+    Event,
+    Host,
+    Metric,
+    NetworkLink,
+    NetworkNode,
+)
+from app.schemas.ingest import ReportIn
 from app.services import ingest_service
 from app.workers.cleanup import cleanup_old_records
-from app.schemas.ingest import ReportIn
 
 
 @pytest.fixture()
@@ -21,6 +31,13 @@ def db_session(tmp_path):
         connect_args={"check_same_thread": False},
         future=True,
     )
+
+    @event.listens_for(test_engine, "connect")
+    def _enable_foreign_keys(connection, _record):
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     Base.metadata.create_all(bind=test_engine)
     TestingSession = sessionmaker(
         bind=test_engine,
@@ -38,9 +55,7 @@ def db_session(tmp_path):
 
 
 def _example_report():
-    example_path = (
-        Path(__file__).parent.parent / "examples" / "ingest.example.json"
-    )
+    example_path = Path(__file__).parent.parent / "examples" / "ingest.example.json"
     raw = json.loads(example_path.read_text(encoding="utf-8"))[0]
     return ReportIn.model_validate(raw)
 
@@ -64,14 +79,26 @@ def test_ingest_service_persists_host_metrics_containers_and_topology(db_session
     assert container.name == "frontend"
     assert container.networks == ["app-net"]
 
-    assert db_session.query(NetworkNode).filter(NetworkNode.host_id == host_id).count() == 3
-    assert db_session.query(NetworkLink).filter(NetworkLink.host_id == host_id).count() == 2
-    assert db_session.query(AvailabilityCheck).filter(
-        AvailabilityCheck.host_id == host_id
-    ).one().is_online is True
+    assert (
+        db_session.query(NetworkNode).filter(NetworkNode.host_id == host_id).count()
+        == 3
+    )
+    assert (
+        db_session.query(NetworkLink).filter(NetworkLink.host_id == host_id).count()
+        == 2
+    )
+    assert (
+        db_session.query(AvailabilityCheck)
+        .filter(AvailabilityCheck.host_id == host_id)
+        .one()
+        .is_online
+        is True
+    )
 
 
-def test_repeated_ingest_updates_host_and_container_but_keeps_metric_history(db_session):
+def test_repeated_ingest_updates_host_and_container_but_keeps_metric_history(
+    db_session,
+):
     report = _example_report()
     host_id = ingest_service.process(db_session, report)
 
@@ -89,16 +116,19 @@ def test_repeated_ingest_updates_host_and_container_but_keeps_metric_history(db_
     assert container.status == "restarting"
     assert db_session.query(Metric).filter(Metric.host_id == host_id).count() == 2
     assert db_session.query(Event).filter(Event.host_id == host_id).count() == 1
-    assert db_session.query(AvailabilityCheck).filter(
-        AvailabilityCheck.host_id == host_id
-    ).count() == 2
+    assert (
+        db_session.query(AvailabilityCheck)
+        .filter(AvailabilityCheck.host_id == host_id)
+        .count()
+        == 2
+    )
 
 
 def test_cleanup_removes_old_history_and_keeps_recent_records(db_session):
     report = _example_report()
     host_id = ingest_service.process(db_session, report)
 
-    old_time = datetime.now(timezone.utc) - timedelta(days=10)
+    old_time = datetime.now(UTC) - timedelta(days=10)
     db_session.add(
         Metric(
             host_id=host_id,
@@ -126,15 +156,18 @@ def test_cleanup_removes_old_history_and_keeps_recent_records(db_session):
     result = cleanup_old_records(
         db_session,
         retention_days=7,
-        now=datetime.now(timezone.utc),
+        now=datetime.now(UTC),
     )
 
     assert result == {"metrics": 1, "events": 1, "availability_checks": 1}
     assert db_session.query(Metric).filter(Metric.host_id == host_id).count() == 1
     assert db_session.query(Event).filter(Event.host_id == host_id).count() == 0
-    assert db_session.query(AvailabilityCheck).filter(
-        AvailabilityCheck.host_id == host_id
-    ).count() == 1
+    assert (
+        db_session.query(AvailabilityCheck)
+        .filter(AvailabilityCheck.host_id == host_id)
+        .count()
+        == 1
+    )
 
 
 def test_ingest_rolls_back_all_changes_on_failure(db_session, monkeypatch):
@@ -153,3 +186,325 @@ def test_ingest_rolls_back_all_changes_on_failure(db_session, monkeypatch):
 
     assert db_session.query(Host).count() == 0
     assert db_session.query(Metric).count() == 0
+
+
+def test_report_rejects_blank_required_identifiers():
+    report = _example_report().model_dump()
+    report["source_id"] = "   "
+
+    with pytest.raises(ValueError):
+        ReportIn.model_validate(report)
+
+
+def test_report_rejects_duplicate_container_ids():
+    report = _example_report().model_dump()
+    report["containers"].append(report["containers"][0].copy())
+
+    with pytest.raises(ValueError, match="контейнеров"):
+        ReportIn.model_validate(report)
+
+
+def test_report_rejects_duplicate_topology_nodes():
+    report = _example_report().model_dump()
+    report["network"]["nodes"].append(report["network"]["nodes"][0].copy())
+
+    with pytest.raises(ValueError, match="узлов"):
+        ReportIn.model_validate(report)
+
+
+def test_report_rejects_links_to_missing_topology_nodes():
+    report = _example_report().model_dump()
+    report["network"]["links"][0]["target"] = "missing-node"
+
+    with pytest.raises(ValueError, match="отсутствующий узел"):
+        ReportIn.model_validate(report)
+
+
+def test_report_rejects_duplicate_topology_links():
+    report = _example_report().model_dump()
+    report["network"]["links"].append(report["network"]["links"][0].copy())
+
+    with pytest.raises(ValueError, match="не должны повторяться"):
+        ReportIn.model_validate(report)
+
+
+def test_database_enforces_foreign_keys(db_session):
+    db_session.add(
+        Metric(
+            host_id=999,
+            timestamp=datetime(2026, 11, 9, 12, 0),
+            cpu_percent=10.0,
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+    db_session.rollback()
+
+
+def test_deleting_host_applies_cascade_and_set_null_rules(db_session):
+    host_id = ingest_service.process(db_session, _example_report())
+    alert = Alert(
+        host_id=host_id,
+        rule="cpu_high",
+        target="server-01",
+        severity="warning",
+        status="active",
+    )
+    db_session.add(alert)
+    db_session.commit()
+    alert_id = alert.id
+
+    host = db_session.query(Host).filter(Host.id == host_id).one()
+    db_session.delete(host)
+    db_session.commit()
+
+    assert db_session.query(Host).filter(Host.id == host_id).count() == 0
+    assert db_session.query(Metric).filter(Metric.host_id == host_id).count() == 0
+    assert db_session.query(Container).filter(Container.host_id == host_id).count() == 0
+    assert db_session.query(Event).filter(Event.host_id == host_id).count() == 0
+    assert (
+        db_session.query(NetworkNode).filter(NetworkNode.host_id == host_id).count()
+        == 0
+    )
+    assert (
+        db_session.query(NetworkLink).filter(NetworkLink.host_id == host_id).count()
+        == 0
+    )
+    assert (
+        db_session.query(AvailabilityCheck)
+        .filter(AvailabilityCheck.host_id == host_id)
+        .count()
+        == 0
+    )
+
+    preserved_alert = db_session.query(Alert).filter(Alert.id == alert_id).one()
+    assert preserved_alert.host_id is None
+
+
+def test_new_topology_replaces_previous_snapshot(db_session):
+    report = _example_report()
+    host_id = ingest_service.process(db_session, report)
+
+    updated = report.model_copy(deep=True)
+    updated.timestamp = updated.timestamp + timedelta(seconds=5)
+    updated.network.nodes = [updated.network.nodes[0]]
+    updated.network.links = []
+
+    ingest_service.process(db_session, updated)
+
+    nodes = db_session.query(NetworkNode).filter(NetworkNode.host_id == host_id).all()
+    links = db_session.query(NetworkLink).filter(NetworkLink.host_id == host_id).all()
+
+    assert len(nodes) == 1
+    assert nodes[0].external_id == "server-01"
+    assert links == []
+
+
+def test_report_without_topology_keeps_previous_snapshot(db_session):
+    report = _example_report()
+    host_id = ingest_service.process(db_session, report)
+
+    updated = report.model_copy(deep=True)
+    updated.timestamp = updated.timestamp + timedelta(seconds=5)
+    updated.network = None
+    ingest_service.process(db_session, updated)
+
+    assert (
+        db_session.query(NetworkNode).filter(NetworkNode.host_id == host_id).count()
+        == 3
+    )
+    assert (
+        db_session.query(NetworkLink).filter(NetworkLink.host_id == host_id).count()
+        == 2
+    )
+
+
+def test_replayed_report_is_idempotent(db_session):
+    report = _example_report()
+    host_id = ingest_service.process(db_session, report)
+
+    assert ingest_service.process(db_session, report) == host_id
+
+    assert db_session.query(Host).count() == 1
+    assert db_session.query(Metric).filter(Metric.host_id == host_id).count() == 1
+    assert (
+        db_session.query(AvailabilityCheck)
+        .filter(AvailabilityCheck.host_id == host_id)
+        .count()
+        == 1
+    )
+
+
+def test_out_of_order_report_does_not_overwrite_newer_state(db_session):
+    report = _example_report()
+    host_id = ingest_service.process(db_session, report)
+
+    newer = report.model_copy(deep=True)
+    newer.timestamp += timedelta(minutes=2)
+    newer.host.cpu_percent = 91.0
+    newer.host.status = "online"
+    ingest_service.process(db_session, newer)
+
+    stale = report.model_copy(deep=True)
+    stale.timestamp += timedelta(minutes=1)
+    stale.host.cpu_percent = 5.0
+    stale.host.status = "offline"
+    ingest_service.process(db_session, stale)
+
+    host = db_session.query(Host).filter(Host.id == host_id).one()
+    metrics = db_session.query(Metric).filter(Metric.host_id == host_id).all()
+
+    assert host.status == "online"
+    assert host.last_seen == newer.timestamp.replace(tzinfo=None)
+    assert len(metrics) == 2
+    assert max(metric.timestamp for metric in metrics) == newer.timestamp.replace(
+        tzinfo=None
+    )
+
+
+def test_missing_optional_network_fields_do_not_erase_known_values(db_session):
+    report = _example_report()
+    host_id = ingest_service.process(db_session, report)
+
+    updated = report.model_copy(deep=True)
+    updated.timestamp += timedelta(seconds=5)
+    updated.host.ip = None
+    updated.containers[0].image = None
+    updated.containers[0].ip = None
+    ingest_service.process(db_session, updated)
+
+    host = db_session.query(Host).filter(Host.id == host_id).one()
+    container = db_session.query(Container).filter(Container.host_id == host_id).one()
+
+    assert host.ip == "192.168.1.10"
+    assert container.image is not None
+    assert container.ip is not None
+
+
+def test_missing_status_does_not_reset_known_host_or_container_status(db_session):
+    report = _example_report()
+    report.host.status = "offline"
+    report.containers[0].status = "running"
+    host_id = ingest_service.process(db_session, report)
+
+    updated = report.model_copy(deep=True)
+    updated.timestamp += timedelta(seconds=5)
+    updated.host.status = None
+    updated.containers[0].status = None
+    ingest_service.process(db_session, updated)
+
+    host = db_session.query(Host).filter(Host.id == host_id).one()
+    container = db_session.query(Container).filter(Container.host_id == host_id).one()
+
+    assert host.status == "offline"
+    assert container.status == "running"
+
+
+def test_missing_container_networks_do_not_clear_known_networks(db_session):
+    report = _example_report()
+    host_id = ingest_service.process(db_session, report)
+
+    updated = report.model_copy(deep=True)
+    updated.timestamp += timedelta(seconds=5)
+    updated.containers[0].networks = None
+    ingest_service.process(db_session, updated)
+
+    container = db_session.query(Container).filter(Container.host_id == host_id).one()
+
+    assert container.networks == ["app-net"]
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("cpu_percent", 101.0),
+        ("memory_percent", -1.0),
+        ("disk_percent", 101.0),
+        ("net_rx_bytes", -1),
+        ("net_tx_bytes", -1),
+    ],
+)
+def test_database_rejects_out_of_range_metrics(db_session, field, value):
+    host_id = ingest_service.process(db_session, _example_report())
+    db_session.add(
+        Metric(
+            host_id=host_id,
+            timestamp=datetime(2026, 11, 9, 12, 0),
+            **{field: value},
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+    db_session.rollback()
+
+
+@pytest.mark.parametrize(
+    "source_id,target_id",
+    [
+        ("missing-node", "server-01"),
+        ("server-01", "missing-node"),
+    ],
+)
+def test_database_rejects_network_links_to_missing_nodes(
+    db_session, source_id, target_id
+):
+    host_id = ingest_service.process(db_session, _example_report())
+    db_session.add(
+        NetworkLink(
+            host_id=host_id,
+            source_id=source_id,
+            target_id=target_id,
+            type="traffic",
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+    db_session.rollback()
+
+
+def test_database_rejects_network_load_outside_range(db_session):
+    host_id = ingest_service.process(db_session, _example_report())
+    db_session.add(
+        NetworkLink(
+            host_id=host_id,
+            source_id="server-01",
+            target_id="frontend",
+            type="traffic",
+            load=150.0,
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+    db_session.rollback()
+
+
+def test_deleting_topology_node_cascades_its_links(db_session):
+    report = _example_report()
+    host_id = ingest_service.process(db_session, report)
+    node = (
+        db_session.query(NetworkNode)
+        .filter(
+            NetworkNode.host_id == host_id,
+            NetworkNode.external_id == "frontend",
+        )
+        .one()
+    )
+
+    db_session.delete(node)
+    db_session.commit()
+
+    remaining_links = (
+        db_session.query(NetworkLink).filter(NetworkLink.host_id == host_id).all()
+    )
+    assert all(
+        link.source_id != "frontend" and link.target_id != "frontend"
+        for link in remaining_links
+    )
