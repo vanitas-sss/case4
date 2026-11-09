@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -19,7 +19,7 @@ def cleanup_old_records(
     if days < 1:
         raise ValueError("retention_days должен быть не меньше 1")
 
-    current_time = to_utc_naive(now) or utc_now_naive()
+    current_time = to_utc_naive(now) if now is not None else utc_now_naive()
     cutoff = current_time - timedelta(days=days)
 
     deleted_metrics = (
