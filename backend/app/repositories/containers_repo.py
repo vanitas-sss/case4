@@ -1,17 +1,24 @@
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.time import to_utc_naive, utc_now_naive
 from app.models.container import Container
 
 
-def _utc_naive(value: Optional[datetime]) -> Optional[datetime]:
-    if value is None:
-        return None
-    if value.tzinfo is not None:
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
-    return value
+def get_by_docker_id(
+    db: Session,
+    host_id: int,
+    docker_id: str,
+) -> Container | None:
+    return (
+        db.query(Container)
+        .filter(
+            Container.host_id == host_id,
+            Container.docker_id == docker_id,
+        )
+        .first()
+    )
 
 
 def upsert_container(
@@ -19,17 +26,13 @@ def upsert_container(
     host_id: int,
     docker_id: str,
     name: str,
-    image: Optional[str] = None,
+    image: str | None = None,
     status: str = "unknown",
-    ip: Optional[str] = None,
-    networks: Optional[list[str]] = None,
-    last_seen: Optional[datetime] = None,
+    ip: str | None = None,
+    networks: list[str] | None = None,
+    last_seen: datetime | None = None,
 ) -> Container:
-    container = (
-        db.query(Container)
-        .filter(Container.host_id == host_id, Container.docker_id == docker_id)
-        .first()
-    )
+    container = get_by_docker_id(db, host_id, docker_id)
     if container is None:
         container = Container(host_id=host_id, docker_id=docker_id, name=name)
         db.add(container)
@@ -39,15 +42,15 @@ def upsert_container(
     container.status = status
     container.ip = ip
     container.networks = networks or []
-    container.last_seen = _utc_naive(last_seen or datetime.now(timezone.utc))
+    container.last_seen = to_utc_naive(last_seen or utc_now_naive())
     db.flush()
     return container
 
 
 def list_containers(
     db: Session,
-    host_id: Optional[int] = None,
-    status: Optional[str] = None,
+    host_id: int | None = None,
+    status: str | None = None,
 ) -> list[Container]:
     query = db.query(Container)
     if host_id is not None:

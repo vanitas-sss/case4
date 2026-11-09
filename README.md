@@ -1,32 +1,59 @@
-# mock-data — заглушка агента
+# Docker Network Mapper
 
-Скрипт ведёт себя как настоящий агент (кейс 1): шлёт массив отчётов на `/api/v1/ingest`.
-Формат — `../contracts/api-examples.json`.
+Система мониторинга Docker-инфраструктуры. Проект собирает сведения о хостах и контейнерах, сохраняет историю метрик и показывает связи между узлами сети.
+
+## Из чего состоит проект
+
+- `backend/` — REST API на FastAPI и слой хранения данных на SQLAlchemy + SQLite.
+- `mock-data/` — генератор тестовых отчётов, имитирующий работу агента.
+- `contracts/` — примеры и описание формата данных между компонентами.
+- `frontend/` — заготовка клиентской части.
+- `docs/` — документация по архитектуре и базе данных.
+
+Подробности: [архитектура проекта](docs/ARCHITECTURE.md) и [слой базы данных](docs/DATABASE.md).
+
+## Запуск backend
+
+Нужен Python 3.11 или новее.
+
+Откройте терминал в корневой папке проекта и выполните:
 
 ```bash
-pip install -r requirements.txt
-python generator.py --url http://localhost:8000/api/v1/ingest --interval 5   # обычная работа
-python generator.py --scenario scenario_full_demo.json                        # автосценарий (~6 мин)
-python seed.py --minutes 60                                                   # история за час
-python generator.py --dry-run --once                                          # посмотреть JSON
+cd backend
+python -m pip install -r requirements.txt
+python -m uvicorn app.main:app --reload
 ```
 
-## Ручное управление (state.json)
-Файл перечитывается каждый шаг, правьте его во время показа:
-- `"servers": {"server-02": "offline"}` — сервер перестаёт слать данные (как упавший агент);
-- `"containers": {"backend": "stopped"}` — контейнер уходит в stopped (`restarting` тоже можно);
-- `"cpu_override": {"server-03": 95}` — держит CPU около 95%.
+После запуска:
+- API: http://127.0.0.1:8000
+- Swagger: http://127.0.0.1:8000/docs
+- Проверка состояния: http://127.0.0.1:8000/api/v1/health
 
-## Сценарий full_demo
-| t | Событие |
-|---|---|
-| 1:00 | server-02 замолчал |
-| 2:00 | server-02 вернулся |
-| 2:30 | контейнер backend stopped |
-| 3:00 | backend running |
-| 3:30 | CPU server-03 = 95% |
-| 5:30 | CPU server-03 в норму |
+Таблицы SQLite создаются при старте приложения. По умолчанию база находится в `backend/data/metrics.db`. Путь можно изменить через переменную окружения `DB_PATH`.
 
-## Типы связей в network.links
-`host` (сервер→контейнер), `network` (контейнер→Docker-сеть), `traffic` (контейнер→контейнер).
-Тип `traffic` добавлен сверх плана — нужно согласовать с Марией и Сергеем (стиль линии на графе).
+## Отправка тестовых данных
+
+Оставьте backend запущенным. Откройте второй терминал в корневой папке проекта:
+
+```bash
+cd mock-data
+python -m pip install -r requirements.txt
+python generator.py
+```
+
+Генератор отправляет отчёты каждые пять секунд. Чтобы остановить его, нажмите `Ctrl+C`.
+
+Дополнительные режимы и сценарии описаны в [mock-data/README.md](mock-data/README.md).
+
+## Тесты
+
+Из папки `backend` выполните:
+
+```bash
+python -m pip install -r requirements.txt
+python -m pytest
+```
+
+## Текущее состояние
+
+Приём отчётов через `POST /api/v1/ingest` и сохранение данных в SQLite реализованы. Часть GET-эндпоинтов пока использует демонстрационные данные из `app/stubs.py` — их подключение к базе выполняется отдельно по мере готовности соответствующих сервисов.

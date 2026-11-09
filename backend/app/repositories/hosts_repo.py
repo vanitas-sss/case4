@@ -1,24 +1,16 @@
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.time import to_utc_naive, utc_now_naive
 from app.models.host import Host
 
 
-def _utc_naive(value: Optional[datetime]) -> Optional[datetime]:
-    if value is None:
-        return None
-    if value.tzinfo is not None:
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
-    return value
-
-
-def get_by_id(db: Session, host_id: int) -> Optional[Host]:
+def get_by_id(db: Session, host_id: int) -> Host | None:
     return db.query(Host).filter(Host.id == host_id).first()
 
 
-def get_by_name(db: Session, source_id: str, name: str) -> Optional[Host]:
+def get_by_name(db: Session, source_id: str, name: str) -> Host | None:
     return (
         db.query(Host)
         .filter(Host.source_id == source_id, Host.name == name)
@@ -26,7 +18,7 @@ def get_by_name(db: Session, source_id: str, name: str) -> Optional[Host]:
     )
 
 
-def list_hosts(db: Session, status: Optional[str] = None) -> list[Host]:
+def list_hosts(db: Session, status: str | None = None) -> list[Host]:
     query = db.query(Host)
     if status:
         query = query.filter(Host.status == status)
@@ -37,9 +29,9 @@ def upsert_host(
     db: Session,
     source_id: str,
     name: str,
-    ip: Optional[str] = None,
-    status: Optional[str] = None,
-    last_seen: Optional[datetime] = None,
+    ip: str | None = None,
+    status: str | None = None,
+    last_seen: datetime | None = None,
 ) -> Host:
     host = get_by_name(db, source_id, name)
     if host is None:
@@ -49,6 +41,6 @@ def upsert_host(
     host.ip = ip
     if status:
         host.status = status
-    host.last_seen = _utc_naive(last_seen or datetime.now(timezone.utc))
+    host.last_seen = to_utc_naive(last_seen or utc_now_naive())
     db.flush()
     return host
