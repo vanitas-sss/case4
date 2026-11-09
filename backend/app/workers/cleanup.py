@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.core.time import to_utc_naive, utc_now_naive
 from app.models.availability import AvailabilityCheck
 from app.models.event import Event
+from app.models.ingest_report import IngestReport
 from app.models.metric import Metric
 
 
@@ -35,6 +36,9 @@ def cleanup_old_records(
         db.query(AvailabilityCheck)
         .filter(AvailabilityCheck.checked_at < cutoff)
         .delete(synchronize_session=False)
+    )
+    db.query(IngestReport).filter(IngestReport.timestamp < cutoff).delete(
+        synchronize_session=False
     )
 
     db.flush()

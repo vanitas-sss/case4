@@ -3,6 +3,7 @@ from app.models.availability import AvailabilityCheck
 from app.models.container import Container
 from app.models.event import Event
 from app.models.host import Host
+from app.models.ingest_report import IngestReport
 from app.models.metric import Metric
 from app.models.network import NetworkLink, NetworkNode
 
@@ -13,6 +14,7 @@ __all__ = [
     "Container",
     "Event",
     "Host",
+    "IngestReport",
     "Metric",
     "NetworkLink",
     "NetworkNode",

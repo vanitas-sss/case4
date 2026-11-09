@@ -11,11 +11,7 @@ def get_by_id(db: Session, host_id: int) -> Host | None:
 
 
 def get_by_name(db: Session, source_id: str, name: str) -> Host | None:
-    return (
-        db.query(Host)
-        .filter(Host.source_id == source_id, Host.name == name)
-        .first()
-    )
+    return db.query(Host).filter(Host.source_id == source_id, Host.name == name).first()
 
 
 def list_hosts(db: Session, status: str | None = None) -> list[Host]:
@@ -38,7 +34,8 @@ def upsert_host(
         host = Host(source_id=source_id, name=name)
         db.add(host)
 
-    host.ip = ip
+    if ip is not None:
+        host.ip = ip
     if status:
         host.status = status
     host.last_seen = to_utc_naive(last_seen or utc_now_naive())
