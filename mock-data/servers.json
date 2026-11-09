@@ -1,0 +1,11 @@
+{
+  "source_id": "lab-01",
+  "servers": [
+    {"name": "server-01", "label": "Server 01", "ip": "192.168.1.10",
+     "cpu": [25, 55], "memory": [45, 70], "disk": [40, 55]},
+    {"name": "server-02", "label": "Server 02", "ip": "192.168.1.11",
+     "cpu": [15, 40], "memory": [35, 60], "disk": [30, 50]},
+    {"name": "server-03", "label": "Server 03", "ip": "192.168.1.12",
+     "cpu": [10, 35], "memory": [30, 55], "disk": [50, 70]}
+  ]
+}
