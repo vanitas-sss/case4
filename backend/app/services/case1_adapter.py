@@ -50,7 +50,6 @@ def _status(raw, is_dead):
 
 
 def convert(data, source_id="case1", host_name=None, host_ip=None):
-    """data: dict (один отчёт) или list. Возвращает list[dict] в формате контракта."""
     if isinstance(data, list):
         out = []
         for item in data:
@@ -91,7 +90,6 @@ def convert(data, source_id="case1", host_name=None, host_ip=None):
 
     return [{
         "schema_version": "1.0", "source_id": source_id, "timestamp": ts,
-        # метрик CPU/RAM/Disk у кейса 1 нет — они необязательные
         "host": {"name": host, "ip": host_ip, "status": "online"},
         "containers": containers,
         "network": {"nodes": nodes, "links": links},
