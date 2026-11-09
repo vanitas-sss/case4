@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 from app import models  # noqa: F401 - registers all SQLAlchemy models
@@ -29,6 +29,13 @@ def api_session_factory(tmp_path):
         connect_args={"check_same_thread": False},
         future=True,
     )
+
+    @event.listens_for(test_engine, "connect")
+    def _enable_foreign_keys(connection, _record):
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     Base.metadata.create_all(bind=test_engine)
     testing_session = sessionmaker(
         bind=test_engine,

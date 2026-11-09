@@ -27,7 +27,7 @@ def upsert_container(
     docker_id: str,
     name: str,
     image: str | None = None,
-    status: str = "unknown",
+    status: str | None = None,
     ip: str | None = None,
     networks: list[str] | None = None,
     last_seen: datetime | None = None,
@@ -38,10 +38,14 @@ def upsert_container(
         db.add(container)
 
     container.name = name
-    container.image = image
-    container.status = status
-    container.ip = ip
-    container.networks = networks or []
+    if image is not None:
+        container.image = image
+    if status is not None:
+        container.status = status
+    if ip is not None:
+        container.ip = ip
+    if networks is not None:
+        container.networks = networks
     container.last_seen = to_utc_naive(last_seen or utc_now_naive())
     db.flush()
     return container
