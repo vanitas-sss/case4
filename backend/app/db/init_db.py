@@ -1,11 +1,10 @@
-from app.db.base import Base
-from app.db.session import engine
-from app import models  # noqa: F401 - importing registers all model classes
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
 
 
 def init_db() -> None:
-    Base.metadata.create_all(bind=engine)
-
-
-if __name__ == "__main__":
-    init_db()
+    backend_dir = Path(__file__).resolve().parents[2]
+    alembic_config = Config(str(backend_dir / "alembic.ini"))
+    command.upgrade(alembic_config, "head")
