@@ -57,7 +57,7 @@ def upsert_rule(
     db: Session,
     name: str,
     metric: str,
-    threshold: int,
+    threshold: float,
     operator: str = ">",
     duration_seconds: int = 0,
     severity: str = "warning",
