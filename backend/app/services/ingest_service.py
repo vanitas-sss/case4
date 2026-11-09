@@ -28,8 +28,6 @@ def process(db: Session, report: ReportIn) -> int:
             and previous_host.last_seen is not None
             and normalized_timestamp <= to_utc_naive(previous_host.last_seen)
         ):
-            # Пропускаем повторные и устаревшие отчёты, чтобы не перезаписать
-            # более свежие данные.
             return previous_host.id
 
         db.add(

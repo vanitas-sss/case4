@@ -1,4 +1,3 @@
-# SQLite не хранит часовой пояс, поэтому сохраняем время в UTC без tzinfo.
 from datetime import UTC, datetime
 
 

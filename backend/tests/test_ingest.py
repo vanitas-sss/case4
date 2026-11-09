@@ -60,7 +60,6 @@ def client(api_session_factory):
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        # Не запускаем lifespan: он инициализирует основную базу данных.
         yield TestClient(app)
     finally:
         app.dependency_overrides.pop(get_db, None)
