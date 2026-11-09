@@ -5,7 +5,6 @@ from alembic.config import Config
 
 
 def init_db() -> None:
-    """Bring the configured database schema up to the latest migration."""
     backend_dir = Path(__file__).resolve().parents[2]
     alembic_config = Config(str(backend_dir / "alembic.ini"))
     command.upgrade(alembic_config, "head")

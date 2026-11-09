@@ -14,6 +14,7 @@ from app.models import (
     Container,
     Event,
     Host,
+    IngestReport,
     Metric,
     NetworkLink,
     NetworkNode,
@@ -62,6 +63,8 @@ def _example_report():
 
 def test_ingest_service_persists_host_metrics_containers_and_topology(db_session):
     report = _example_report()
+    report.network.nodes[0].ip = "192.168.1.10"
+    report.network.nodes[0].status = "online"
 
     host_id = ingest_service.process(db_session, report)
 
@@ -87,6 +90,16 @@ def test_ingest_service_persists_host_metrics_containers_and_topology(db_session
         db_session.query(NetworkLink).filter(NetworkLink.host_id == host_id).count()
         == 2
     )
+    node = (
+        db_session.query(NetworkNode)
+        .filter(
+            NetworkNode.host_id == host_id,
+            NetworkNode.external_id == "server-01",
+        )
+        .one()
+    )
+    assert node.ip == "192.168.1.10"
+    assert node.status == "online"
     assert (
         db_session.query(AvailabilityCheck)
         .filter(AvailabilityCheck.host_id == host_id)
@@ -151,6 +164,13 @@ def test_cleanup_removes_old_history_and_keeps_recent_records(db_session):
             is_online=False,
         )
     )
+    db_session.add(
+        IngestReport(
+            source_id="old-source",
+            host_name="old-host",
+            timestamp=old_time.replace(tzinfo=None),
+        )
+    )
     db_session.commit()
 
     result = cleanup_old_records(
@@ -162,6 +182,12 @@ def test_cleanup_removes_old_history_and_keeps_recent_records(db_session):
     assert result == {"metrics": 1, "events": 1, "availability_checks": 1}
     assert db_session.query(Metric).filter(Metric.host_id == host_id).count() == 1
     assert db_session.query(Event).filter(Event.host_id == host_id).count() == 0
+    assert (
+        db_session.query(IngestReport)
+        .filter(IngestReport.source_id == "old-source")
+        .count()
+        == 0
+    )
     assert (
         db_session.query(AvailabilityCheck)
         .filter(AvailabilityCheck.host_id == host_id)
@@ -186,6 +212,14 @@ def test_ingest_rolls_back_all_changes_on_failure(db_session, monkeypatch):
 
     assert db_session.query(Host).count() == 0
     assert db_session.query(Metric).count() == 0
+
+
+def test_report_rejects_unknown_host_status():
+    report = _example_report().model_dump()
+    report["host"]["status"] = "available-ish"
+
+    with pytest.raises(ValueError):
+        ReportIn.model_validate(report)
 
 
 def test_report_rejects_blank_required_identifiers():
@@ -226,6 +260,23 @@ def test_report_rejects_duplicate_topology_links():
 
     with pytest.raises(ValueError, match="не должны повторяться"):
         ReportIn.model_validate(report)
+
+
+def test_database_rejects_duplicate_report_keys(db_session):
+    report = _example_report()
+    ingest_service.process(db_session, report)
+    db_session.add(
+        IngestReport(
+            source_id=report.source_id,
+            host_name=report.host.name,
+            timestamp=report.timestamp.replace(tzinfo=None),
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+    db_session.rollback()
 
 
 def test_database_enforces_foreign_keys(db_session):
@@ -335,6 +386,17 @@ def test_replayed_report_is_idempotent(db_session):
         .count()
         == 1
     )
+
+
+def test_duplicate_report_key_does_not_create_another_metric(db_session):
+    report = _example_report()
+    host_id = ingest_service.process(db_session, report)
+    host = db_session.query(Host).filter(Host.id == host_id).one()
+    host.last_seen = report.timestamp - timedelta(seconds=1)
+    db_session.commit()
+
+    assert ingest_service.process(db_session, report) == host_id
+    assert db_session.query(Metric).filter(Metric.host_id == host_id).count() == 1
 
 
 def test_out_of_order_report_does_not_overwrite_newer_state(db_session):

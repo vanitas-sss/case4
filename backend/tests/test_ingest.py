@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-from app import models  # noqa: F401 - registers all SQLAlchemy models
+from app import models  # noqa: F401 — импорт нужен, чтобы зарегистрировать все модели SQLAlchemy.
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
@@ -22,7 +22,6 @@ EXAMPLE = json.loads(
 
 @pytest.fixture()
 def api_session_factory(tmp_path):
-    """Create a fresh SQLite database for each API test."""
     database_file = tmp_path / "api-test.db"
     test_engine = create_engine(
         f"sqlite:///{database_file.as_posix()}",
@@ -52,8 +51,6 @@ def api_session_factory(tmp_path):
 
 @pytest.fixture()
 def client(api_session_factory):
-    """Override the API database dependency with the isolated test database."""
-
     def override_get_db():
         db = api_session_factory()
         try:
@@ -63,8 +60,7 @@ def client(api_session_factory):
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        # Do not enter TestClient as a context manager: its lifespan initializes
-        # the default database, which API tests must never touch.
+        # Не запускаем lifespan: он инициализирует основную базу данных.
         yield TestClient(app)
     finally:
         app.dependency_overrides.pop(get_db, None)

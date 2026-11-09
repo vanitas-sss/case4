@@ -9,7 +9,6 @@ def replace_topology(
     nodes: list[dict],
     links: list[dict],
 ) -> None:
-    """Replace the latest topology snapshot for one host."""
     db.query(NetworkLink).filter(NetworkLink.host_id == host_id).delete(
         synchronize_session=False
     )
@@ -24,11 +23,13 @@ def replace_topology(
                 external_id=item["id"],
                 label=item.get("label"),
                 type=item["type"],
+                status=item.get("status"),
+                ip=item.get("ip"),
             )
         )
 
-    # Links have composite foreign keys to topology nodes, so nodes must
-    # exist in the database before links are inserted.
+    # Сначала сохраняем узлы: связи ссылаются на них через составные
+    # внешние ключи.
     db.flush()
 
     for item in links:

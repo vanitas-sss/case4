@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -11,7 +11,7 @@ class InputModel(BaseModel):
 class HostIn(InputModel):
     name: str = Field(min_length=1, max_length=255)
     ip: str | None = Field(default=None, max_length=64)
-    status: str | None = Field(default=None, min_length=1, max_length=32)
+    status: Literal["online", "warning", "offline", "unknown"] | None = None
     cpu_percent: float | None = Field(default=None, ge=0, le=100)
     memory_percent: float | None = Field(default=None, ge=0, le=100)
     disk_percent: float | None = Field(default=None, ge=0, le=100)
@@ -32,6 +32,8 @@ class NodeIn(InputModel):
     id: str = Field(min_length=1, max_length=255)
     label: str | None = Field(default=None, max_length=255)
     type: str = Field(min_length=1, max_length=32)
+    status: str | None = Field(default=None, max_length=32)
+    ip: str | None = Field(default=None, max_length=64)
 
 
 class LinkIn(InputModel):
