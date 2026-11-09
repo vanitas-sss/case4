@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -13,7 +13,7 @@ class AlertRule(Base):
     name = Column(String(120), nullable=False, unique=True)
     metric = Column(String(80), nullable=False)
     operator = Column(String(8), nullable=False, default=">")
-    threshold = Column(Integer, nullable=False)
+    threshold = Column(Float, nullable=False)
     duration_seconds = Column(Integer, nullable=False, default=0)
     severity = Column(String(32), nullable=False, default="warning")
     enabled = Column(Boolean, nullable=False, default=True)
