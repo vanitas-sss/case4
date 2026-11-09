@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+"""Заливает историю метрик за N минут, чтобы графики были заполнены сразу.
+
+  python seed.py --minutes 60 --url http://localhost:8000/api/v1/ingest
+Отчёты идут с timestamp в прошлом пачками по 100 штук.
+Backend считает last_seen по времени получения, поэтому seed серверы не «оживляет».
+"""
 import argparse
 import os
 from datetime import datetime, timedelta, timezone

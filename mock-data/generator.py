@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
+"""Заглушка агента: раз в N секунд шлёт массив отчётов на /api/v1/ingest.
 
+Формат отчёта — тот же, что описан в contracts/api-examples.json.
+
+Примеры:
+  python generator.py --url http://localhost:8000/api/v1/ingest --interval 5
+  python generator.py --scenario scenario_full_demo.json
+  python generator.py --dry-run --once        # только напечатать JSON
+Управление вручную: правьте state.json прямо во время работы.
+"""
 import argparse
 import json
 import os
@@ -29,6 +38,7 @@ def clamp(v, lo=0.0, hi=100.0):
 
 
 class Simulator:
+    """Хранит «прошлые» значения, чтобы линии на графиках были плавными."""
 
     def __init__(self, seed=None):
         self.rng = random.Random(seed)
@@ -37,14 +47,15 @@ class Simulator:
         self.servers = cfg["servers"]
         self.containers = load_json("containers.json")
         self.traffic_links = load_json("network.json")["traffic_links"]
-        self.cur = {}      
-        self.net = {}      
+        self.cur = {}      # server -> {cpu, memory, disk}
+        self.net = {}      # server -> [rx, tx] накопительные счётчики
         for s in self.servers:
             self.cur[s["name"]] = {
                 k: self.rng.uniform(*s[k]) for k in ("cpu", "memory", "disk")
             }
             self.net[s["name"]] = [10_000_000, 5_000_000]
 
+    # --- метрики -----------------------------------------------------
     def _step(self, server, key, override=None):
         lo, hi = server[key]
         v = self.cur[server["name"]][key]
@@ -52,6 +63,7 @@ class Simulator:
             target, noise = override, 1.0
         else:
             target, noise = (lo + hi) / 2, (hi - lo) / 12
+        # тянемся к цели + небольшой шум => плавные изменения, а не скачки
         v += (target - v) * 0.15 + self.rng.uniform(-noise, noise)
         if override is None:
             v = clamp(v, lo, hi)
@@ -60,6 +72,7 @@ class Simulator:
         self.cur[server["name"]][key] = v
         return round(v, 1)
 
+    # --- сеть --------------------------------------------------------
     def _network(self, server, cont_status):
         name = server["name"]
         conts = self.containers.get(name, [])
@@ -87,13 +100,14 @@ class Simulator:
                               "load": self.rng.randint(*l["load"]) if both_up else 0})
         return {"nodes": nodes, "links": links}
 
+    # --- отчёты ------------------------------------------------------
     def build_reports(self, state, ts=None):
         """Список отчётов (по одному на сервер). Offline-серверы пропускаются."""
         reports = []
         for s in self.servers:
             name = s["name"]
             if state.get("servers", {}).get(name, "online") == "offline":
-                continue  
+                continue  # агент «молчит» — именно так падает настоящий
             override = (state.get("cpu_override") or {}).get(name)
             cpu = self._step(s, "cpu", override)
             mem = self._step(s, "memory")
@@ -124,7 +138,9 @@ class Simulator:
         return reports
 
 
+# ---------------------------------------------------------------------
 def read_state():
+    """state.json перечитывается на каждом шаге — можно править руками."""
     try:
         return load_json("state.json")
     except (OSError, json.JSONDecodeError) as e:
@@ -155,6 +171,7 @@ def send(url, reports, dry_run=False):
         print(f"[{utc_iso()}] отправлено отчётов: {len(reports)} -> {r.status_code} {r.text[:120]}")
         return r.ok
     except requests.RequestException as e:
+        # не падаем: backend может ещё стартовать
         print(f"[{utc_iso()}] backend недоступен ({e.__class__.__name__}), повтор на след. шаге")
         return False
 
