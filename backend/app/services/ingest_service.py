@@ -1,6 +1,5 @@
 from sqlalchemy.orm import Session
 
-from app.models.container import Container
 from app.repositories import (
     availability_repo,
     containers_repo,
@@ -9,18 +8,19 @@ from app.repositories import (
     metrics_repo,
     network_repo,
 )
+from app.schemas.ingest import ReportIn
 
 
-def process(db: Session, report) -> int:
-    """Persist one validated ReportIn object and return the host database ID."""
-    data = report.model_dump() if hasattr(report, "model_dump") else report
+def process(db: Session, report: ReportIn) -> int:
+    """Сохраняет один проверенный отчёт и возвращает ID хоста."""
+    data = report.model_dump()
     host_data = data["host"]
     timestamp = data["timestamp"]
     source_id = data["source_id"]
 
     try:
         previous_host = hosts_repo.get_by_name(db, source_id, host_data["name"])
-        previous_status = previous_host.status if previous_host else None
+        previous_host_status = previous_host.status if previous_host else None
 
         host = hosts_repo.upsert_host(
             db=db,
@@ -42,23 +42,23 @@ def process(db: Session, report) -> int:
             net_tx_bytes=host_data.get("net_tx_bytes"),
         )
 
-        if previous_status and host.status != previous_status:
+        if previous_host_status and host.status != previous_host_status:
             events_repo.create_event(
                 db,
                 host_id=host.id,
                 event_type="host_status_changed",
-                message=f"Статус сервера изменился: {previous_status} → {host.status}",
+                message=(
+                    f"Статус сервера изменился: "
+                    f"{previous_host_status} → {host.status}"
+                ),
                 timestamp=timestamp,
             )
 
         for item in data.get("containers") or []:
-            previous_container = (
-                db.query(Container)
-                .filter(
-                    Container.host_id == host.id,
-                    Container.docker_id == item["id"],
-                )
-                .first()
+            previous_container = containers_repo.get_by_docker_id(
+                db,
+                host_id=host.id,
+                docker_id=item["id"],
             )
             previous_container_status = (
                 previous_container.status if previous_container else None

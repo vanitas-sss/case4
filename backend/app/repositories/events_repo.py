@@ -1,33 +1,25 @@
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.time import to_utc_naive, utc_now_naive
 from app.models.event import Event
-
-
-def _utc_naive(value: Optional[datetime]) -> Optional[datetime]:
-    if value is None:
-        return None
-    if value.tzinfo is not None:
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
-    return value
 
 
 def create_event(
     db: Session,
     host_id: int,
     event_type: str,
-    message: Optional[str] = None,
-    timestamp: Optional[datetime] = None,
-    container_id: Optional[int] = None,
+    message: str | None = None,
+    timestamp: datetime | None = None,
+    container_id: int | None = None,
 ) -> Event:
     event = Event(
         host_id=host_id,
         container_id=container_id,
         type=event_type,
         message=message,
-        timestamp=_utc_naive(timestamp or datetime.now(timezone.utc)),
+        timestamp=to_utc_naive(timestamp or utc_now_naive()),
     )
     db.add(event)
     db.flush()
@@ -37,8 +29,8 @@ def create_event(
 def list_events(
     db: Session,
     limit: int = 50,
-    event_type: Optional[str] = None,
-    host_id: Optional[int] = None,
+    event_type: str | None = None,
+    host_id: int | None = None,
 ) -> list[Event]:
     query = db.query(Event)
     if event_type:

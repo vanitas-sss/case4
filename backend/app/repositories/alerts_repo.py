@@ -1,17 +1,9 @@
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.time import to_utc_naive, utc_now_naive
 from app.models.alert import Alert, AlertRule
-
-
-def _utc_naive(value: Optional[datetime]) -> Optional[datetime]:
-    if value is None:
-        return None
-    if value.tzinfo is not None:
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
-    return value
 
 
 def create_alert(
@@ -19,9 +11,9 @@ def create_alert(
     rule: str,
     target: str,
     severity: str = "warning",
-    message: Optional[str] = None,
-    host_id: Optional[int] = None,
-    started_at: Optional[datetime] = None,
+    message: str | None = None,
+    host_id: int | None = None,
+    started_at: datetime | None = None,
 ) -> Alert:
     alert = Alert(
         host_id=host_id,
@@ -29,24 +21,29 @@ def create_alert(
         target=target,
         severity=severity,
         message=message,
-        started_at=_utc_naive(started_at or datetime.now(timezone.utc)),
+        started_at=to_utc_naive(started_at or utc_now_naive()),
     )
     db.add(alert)
     db.flush()
     return alert
 
 
-def resolve_alert(db: Session, alert_id: int, resolved_at: Optional[datetime] = None) -> Optional[Alert]:
+def resolve_alert(
+    db: Session,
+    alert_id: int,
+    resolved_at: datetime | None = None,
+) -> Alert | None:
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if alert is None:
         return None
+
     alert.status = "resolved"
-    alert.resolved_at = _utc_naive(resolved_at or datetime.now(timezone.utc))
+    alert.resolved_at = to_utc_naive(resolved_at or utc_now_naive())
     db.flush()
     return alert
 
 
-def list_alerts(db: Session, status: Optional[str] = None) -> list[Alert]:
+def list_alerts(db: Session, status: str | None = None) -> list[Alert]:
     query = db.query(Alert)
     if status:
         query = query.filter(Alert.status == status)
@@ -67,6 +64,7 @@ def upsert_rule(
     if rule is None:
         rule = AlertRule(name=name, metric=metric, threshold=threshold)
         db.add(rule)
+
     rule.metric = metric
     rule.threshold = threshold
     rule.operator = operator
