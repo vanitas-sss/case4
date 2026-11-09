@@ -14,7 +14,6 @@ def cleanup_old_records(
     retention_days: int | None = None,
     now: datetime | None = None,
 ) -> dict[str, int]:
-    """Удаляет историю метрик, событий и проверок старше срока хранения."""
     days = settings.RETENTION_DAYS if retention_days is None else retention_days
     if days < 1:
         raise ValueError("retention_days должен быть не меньше 1")
