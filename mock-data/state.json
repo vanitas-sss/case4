@@ -1,0 +1,5 @@
+{
+  "servers": {"server-01": "online", "server-02": "online", "server-03": "online"},
+  "containers": {},
+  "cpu_override": {}
+}
