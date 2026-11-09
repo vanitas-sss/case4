@@ -1,0 +1,13 @@
+{
+  "comment": "Связи между контейнерами (трафик). Связи server->container и container->network генератор строит сам.",
+  "traffic_links": [
+    {"source": "frontend",    "target": "backend",  "load": [20, 70]},
+    {"source": "backend",     "target": "database", "load": [15, 80]},
+    {"source": "backend",     "target": "cache",    "load": [5, 45]},
+    {"source": "api-gateway", "target": "auth-service", "load": [10, 50]},
+    {"source": "api-gateway", "target": "worker",   "load": [10, 60]},
+    {"source": "worker",      "target": "queue",    "load": [5, 75]},
+    {"source": "lab-web",     "target": "lab-app",  "load": [5, 40]},
+    {"source": "lab-app",     "target": "lab-db",   "load": [5, 55]}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "full_demo",
+  "events": [
+    {"at": 60,  "server": "server-02", "state": "offline"},
+    {"at": 120, "server": "server-02", "state": "online"},
+    {"at": 150, "container": "backend", "state": "stopped"},
+    {"at": 180, "container": "backend", "state": "running"},
+    {"at": 210, "cpu": {"server-03": 95}},
+    {"at": 330, "cpu": {"server-03": null}}
+  ]
+}
