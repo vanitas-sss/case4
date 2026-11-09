@@ -26,7 +26,7 @@ FIELD_MAP = {
     "host": ["host", "hostname"],
 }
 
-MAX_LOAD_CONNECTIONS = 100  # столько соединений = load 100
+MAX_LOAD_CONNECTIONS = 100 
 
 
 def _pick(d, key, default=None):

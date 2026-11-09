@@ -12,7 +12,6 @@ from app.schemas.ingest import ReportIn
 
 
 def process(db: Session, report: ReportIn) -> int:
-    """Сохраняет один проверенный отчёт и возвращает ID хоста."""
     data = report.model_dump()
     host_data = data["host"]
     timestamp = data["timestamp"]

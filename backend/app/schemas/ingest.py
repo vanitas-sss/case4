@@ -32,7 +32,7 @@ class NodeIn(BaseModel):
 class LinkIn(BaseModel):
     source: str
     target: str
-    type: str  # host, network или traffic
+    type: str  
     load: float | None = Field(default=None, ge=0, le=100)
 
 

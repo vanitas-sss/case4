@@ -11,7 +11,6 @@ def replace_topology(
     nodes: list[dict],
     links: list[dict],
 ) -> None:
-    """Replace the latest topology snapshot for one host."""
     db.query(NetworkLink).filter(NetworkLink.host_id == host_id).delete(synchronize_session=False)
     db.query(NetworkNode).filter(NetworkNode.host_id == host_id).delete(synchronize_session=False)
 

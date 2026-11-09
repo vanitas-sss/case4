@@ -1,5 +1,5 @@
 {
-  "comment": "Связи между контейнерами (трафик). Связи server->container и container->network генератор строит сам.",
+  "comment": "Связи между контейнерами",
   "traffic_links": [
     {"source": "frontend",    "target": "backend",  "load": [20, 70]},
     {"source": "backend",     "target": "database", "load": [15, 80]},

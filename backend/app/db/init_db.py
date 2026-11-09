@@ -4,7 +4,6 @@ from app import models  # noqa: F401 - importing registers all model classes
 
 
 def init_db() -> None:
-    """Create all tables that do not exist yet."""
     Base.metadata.create_all(bind=engine)
 
 
