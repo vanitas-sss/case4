@@ -1,8 +1,7 @@
-from datetime import datetime
-
 from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
+from app.core.time import utc_now_naive
 from app.db.base import Base
 
 
@@ -18,11 +17,20 @@ class Host(Base):
     ip = Column(String(64), nullable=True)
     status = Column(String(32), nullable=False, default="unknown")
     last_seen = Column(DateTime(timezone=True), nullable=True, index=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now_naive)
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
 
     metrics = relationship("Metric", back_populates="host", cascade="all, delete-orphan")
-    containers = relationship("Container", back_populates="host", cascade="all, delete-orphan")
+    containers = relationship(
+        "Container", back_populates="host", cascade="all, delete-orphan"
+    )
     events = relationship("Event", back_populates="host", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="host")
-    availability_checks = relationship("AvailabilityCheck", back_populates="host", cascade="all, delete-orphan")
+    availability_checks = relationship(
+        "AvailabilityCheck", back_populates="host", cascade="all, delete-orphan"
+    )

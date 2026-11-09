@@ -1,32 +1,24 @@
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.time import to_utc_naive
 from app.models.metric import Metric
-
-
-def _utc_naive(value: Optional[datetime]) -> Optional[datetime]:
-    if value is None:
-        return None
-    if value.tzinfo is not None:
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
-    return value
 
 
 def add_metric(
     db: Session,
     host_id: int,
     timestamp: datetime,
-    cpu_percent: Optional[float] = None,
-    memory_percent: Optional[float] = None,
-    disk_percent: Optional[float] = None,
-    net_rx_bytes: Optional[int] = None,
-    net_tx_bytes: Optional[int] = None,
+    cpu_percent: float | None = None,
+    memory_percent: float | None = None,
+    disk_percent: float | None = None,
+    net_rx_bytes: int | None = None,
+    net_tx_bytes: int | None = None,
 ) -> Metric:
     metric = Metric(
         host_id=host_id,
-        timestamp=_utc_naive(timestamp),
+        timestamp=to_utc_naive(timestamp),
         cpu_percent=cpu_percent,
         memory_percent=memory_percent,
         disk_percent=disk_percent,
@@ -41,16 +33,16 @@ def add_metric(
 def list_metrics(
     db: Session,
     host_id: int,
-    since: Optional[datetime] = None,
+    since: datetime | None = None,
     limit: int = 500,
 ) -> list[Metric]:
     query = db.query(Metric).filter(Metric.host_id == host_id)
     if since is not None:
-        query = query.filter(Metric.timestamp >= _utc_naive(since))
+        query = query.filter(Metric.timestamp >= to_utc_naive(since))
     return query.order_by(Metric.timestamp.desc()).limit(limit).all()
 
 
-def get_latest_metric(db: Session, host_id: int) -> Optional[Metric]:
+def get_latest_metric(db: Session, host_id: int) -> Metric | None:
     return (
         db.query(Metric)
         .filter(Metric.host_id == host_id)
