@@ -27,7 +27,7 @@ def process(db: Session, report) -> int:
             source_id=source_id,
             name=host_data["name"],
             ip=host_data.get("ip"),
-            status=host_data.get("status") or "unknown",
+            status=host_data.get("status") or "online",
             last_seen=timestamp,
         )
 
