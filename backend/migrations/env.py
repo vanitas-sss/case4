@@ -5,10 +5,9 @@ from pathlib import Path
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-# Ensure the backend package can be imported when Alembic runs from this folder.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app import models  # noqa: F401 - register all models
+from app import models  # noqa: F401 — импорт нужен, чтобы Alembic увидел все модели.
 from app.db.base import Base
 from app.db.session import _database_url
 
@@ -17,7 +16,6 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Use the same database path as the application.
 config.set_main_option("sqlalchemy.url", _database_url().replace("%", "%%"))
 
 target_metadata = Base.metadata

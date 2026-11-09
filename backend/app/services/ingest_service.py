@@ -1,6 +1,8 @@
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.time import to_utc_naive
+from app.models.ingest_report import IngestReport
 from app.repositories import (
     availability_repo,
     containers_repo,
@@ -17,18 +19,27 @@ def process(db: Session, report: ReportIn) -> int:
     host_data = data["host"]
     timestamp = data["timestamp"]
     source_id = data["source_id"]
+    normalized_timestamp = to_utc_naive(timestamp)
 
     try:
         previous_host = hosts_repo.get_by_name(db, source_id, host_data["name"])
-
-        normalized_timestamp = to_utc_naive(timestamp)
         if (
             previous_host is not None
             and previous_host.last_seen is not None
             and normalized_timestamp <= to_utc_naive(previous_host.last_seen)
         ):
-            # Повторные и запоздавшие отчёты не должны откатывать актуальное состояние.
+            # Пропускаем повторные и устаревшие отчёты, чтобы не перезаписать
+            # более свежие данные.
             return previous_host.id
+
+        db.add(
+            IngestReport(
+                source_id=source_id,
+                host_name=host_data["name"],
+                timestamp=normalized_timestamp,
+            )
+        )
+        db.flush()
 
         previous_host_status = previous_host.status if previous_host else None
 
@@ -125,6 +136,22 @@ def process(db: Session, report: ReportIn) -> int:
 
         db.commit()
         return host.id
+    except IntegrityError:
+        db.rollback()
+        duplicate = (
+            db.query(IngestReport.id)
+            .filter(
+                IngestReport.source_id == source_id,
+                IngestReport.host_name == host_data["name"],
+                IngestReport.timestamp == normalized_timestamp,
+            )
+            .first()
+        )
+        if duplicate is not None:
+            host = hosts_repo.get_by_name(db, source_id, host_data["name"])
+            if host is not None:
+                return host.id
+        raise
     except Exception:
         db.rollback()
         raise
