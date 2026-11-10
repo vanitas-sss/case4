@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     DB_PATH: str = "data/metrics.db"
+    AGENT_TOKEN: str = ""
 
     HEARTBEAT_INTERVAL: int = 60
     WARNING_AFTER: int = 120
