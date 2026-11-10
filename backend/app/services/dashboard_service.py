@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -145,18 +146,27 @@ def list_topology(db: Session, host_id: int | None = None, node_type: str | None
     if host_id is not None:
         node_query = node_query.filter(NetworkNode.host_id == host_id)
         link_query = link_query.filter(NetworkLink.host_id == host_id)
-    nodes = node_query.order_by(NetworkNode.id.asc()).all()
+    nodes = node_query.order_by(NetworkNode.host_id.asc(), NetworkNode.id.asc()).all()
     if node_type:
         nodes = [node for node in nodes if node.type == node_type]
-    allowed = {node.external_id for node in nodes}
+
+    # When several hosts are returned, namespace IDs to prevent collisions
+    # between identical external node IDs belonging to different hosts.
+    def public_id(owner_id: int, external_id: str) -> str:
+        return external_id if host_id is not None else f"{owner_id}:{external_id}"
+
+    allowed = {(node.host_id, node.external_id) for node in nodes}
     links = [
-        link for link in link_query.order_by(NetworkLink.id.asc()).all()
-        if link.source_id in allowed and link.target_id in allowed
+        link for link in link_query.order_by(NetworkLink.host_id.asc(), NetworkLink.id.asc()).all()
+        if (link.host_id, link.source_id) in allowed
+        and (link.host_id, link.target_id) in allowed
     ]
     return {
         "nodes": [
             {
-                "id": node.external_id,
+                "id": public_id(node.host_id, node.external_id),
+                "external_id": node.external_id,
+                "host_id": node.host_id,
                 "label": node.label,
                 "type": node.type,
                 "status": node.status,
@@ -166,10 +176,11 @@ def list_topology(db: Session, host_id: int | None = None, node_type: str | None
         ],
         "links": [
             {
-                "source": link.source_id,
-                "target": link.target_id,
+                "source": public_id(link.host_id, link.source_id),
+                "target": public_id(link.host_id, link.target_id),
                 "type": link.type,
                 "load": link.load,
+                "host_id": link.host_id,
             }
             for link in links
         ],
@@ -187,29 +198,33 @@ def list_availability(db: Session, period: str) -> list[dict]:
     now = utc_now_naive()
     since = now - windows[period]
     hosts = db.query(Host).order_by(Host.name.asc()).all()
+
+    aggregates = (
+        db.query(
+            AvailabilityCheck.host_id,
+            func.count(AvailabilityCheck.id),
+            func.sum(case((AvailabilityCheck.is_online.is_(True), 1), else_=0)),
+        )
+        .filter(AvailabilityCheck.checked_at >= since)
+        .group_by(AvailabilityCheck.host_id)
+        .all()
+    )
+    stats = {
+        row[0]: (int(row[1]), int(row[2] or 0))
+        for row in aggregates
+    }
+
     result = []
     for host in hosts:
-        checks = (
-            db.query(AvailabilityCheck)
-            .filter(
-                AvailabilityCheck.host_id == host.id,
-                AvailabilityCheck.checked_at >= since,
-            )
-            .all()
-        )
-        uptime = (
-            round(100 * sum(check.is_online for check in checks) / len(checks), 2)
-            if checks else None
-        )
+        total, successful = stats.get(host.id, (0, 0))
         result.append({
             "host": host.name,
             "status": host_status(host, now),
             "last_seen": iso_utc(host.last_seen),
-            "uptime_percent": uptime,
-            "checks_total": len(checks),
+            "uptime_percent": round(100 * successful / total, 2) if total else None,
+            "checks_total": total,
         })
     return result
-
 
 def list_event_rows(
     db: Session, limit: int, event_type: str | None = None, host_id: int | None = None
