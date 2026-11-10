@@ -11,6 +11,7 @@ from app.repositories import (
     metrics_repo,
     network_repo,
 )
+from app.services.alert_service import evaluate_host
 from app.schemas.ingest import ReportIn
 
 
