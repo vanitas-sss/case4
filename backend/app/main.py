@@ -1,21 +1,30 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
 from app.api.v1.router import api_router
 from app.db.init_db import init_db
+from app.workers.monitor import cleanup_worker, monitor_worker
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    yield
+    monitor_task = asyncio.create_task(monitor_worker())
+    cleanup_task = asyncio.create_task(cleanup_worker())
+    try:
+        yield
+    finally:
+        for task in (monitor_task, cleanup_task):
+            task.cancel()
+        await asyncio.gather(monitor_task, cleanup_task, return_exceptions=True)
 
 
 app = FastAPI(
     title="netmon",
     description="Сервис мониторинга и визуализации состояния ИТ-инфраструктуры (кейс 4)",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 

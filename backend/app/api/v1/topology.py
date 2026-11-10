@@ -1,19 +1,16 @@
-from typing import Optional
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
 
-from fastapi import APIRouter
-
-from app import stubs
+from app.db.session import get_db
+from app.services import dashboard_service
 
 router = APIRouter(tags=["topology"])
 
 
 @router.get("/topology")
-def get_topology(host_id: Optional[int] = None, type: Optional[str] = None):
-    # TODO: заменить на topology_service.build_graph(db, filters)
-    nodes = stubs.TOPOLOGY["nodes"]
-    links = stubs.TOPOLOGY["links"]
-    if type:
-        nodes = [n for n in nodes if n["type"] == type]
-        ids = {n["id"] for n in nodes}
-        links = [l for l in links if l["source"] in ids and l["target"] in ids]
-    return {"nodes": nodes, "links": links, "generated_at": stubs.TOPOLOGY["generated_at"]}
+def get_topology(
+    host_id: int | None = None,
+    type: str | None = Query(None, min_length=1, max_length=32),
+    db: Session = Depends(get_db),
+):
+    return dashboard_service.list_topology(db, host_id, type)

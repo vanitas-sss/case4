@@ -20,8 +20,9 @@ from app.models import (
     NetworkNode,
 )
 from app.schemas.ingest import ReportIn
-from app.services import ingest_service
+from app.services import alert_service, ingest_service
 from app.workers.cleanup import cleanup_old_records
+from app.workers.monitor import check_stale_hosts
 
 
 @pytest.fixture()
@@ -570,3 +571,76 @@ def test_deleting_topology_node_cascades_its_links(db_session):
         link.source_id != "frontend" and link.target_id != "frontend"
         for link in remaining_links
     )
+
+
+def test_cpu_alert_is_opened_and_resolved_when_metric_recovers(db_session):
+    report = _example_report()
+    report.host.cpu_percent = 95.0
+    host_id = ingest_service.process(db_session, report)
+
+    alert = (
+        db_session.query(Alert)
+        .filter(Alert.host_id == host_id, Alert.rule == "cpu_high")
+        .one()
+    )
+    assert alert.status == "active"
+    assert alert.severity == "warning"
+
+    recovered = report.model_copy(deep=True)
+    recovered.timestamp += timedelta(seconds=5)
+    recovered.host.cpu_percent = 40.0
+    ingest_service.process(db_session, recovered)
+
+    db_session.refresh(alert)
+    assert alert.status == "resolved"
+    assert alert.resolved_at is not None
+    assert (
+        db_session.query(Event)
+        .filter(Event.host_id == host_id, Event.type == "alert_resolved")
+        .count()
+        == 1
+    )
+
+
+def test_offline_host_creates_critical_alert(db_session):
+    report = _example_report()
+    report.host.status = "offline"
+    host_id = ingest_service.process(db_session, report)
+
+    alert = (
+        db_session.query(Alert)
+        .filter(Alert.host_id == host_id, Alert.rule == "host_offline")
+        .one()
+    )
+    assert alert.status == "active"
+    assert alert.severity == "critical"
+
+
+
+def test_heartbeat_worker_marks_host_offline_and_ingest_resolves_alert(db_session):
+    report = _example_report()
+    report.timestamp = datetime.now(UTC) - timedelta(seconds=200)
+    report.host.status = "online"
+    host_id = ingest_service.process(db_session, report)
+
+    changed = check_stale_hosts(db_session, now=datetime.now(UTC))
+    assert changed == 1
+
+    host = db_session.query(Host).filter(Host.id == host_id).one()
+    assert host.status == "offline"
+    offline_alert = (
+        db_session.query(Alert)
+        .filter(Alert.host_id == host_id, Alert.rule == "host_offline")
+        .one()
+    )
+    assert offline_alert.status == "active"
+
+    recovered = report.model_copy(deep=True)
+    recovered.timestamp = datetime.now(UTC)
+    recovered.host.status = None
+    ingest_service.process(db_session, recovered)
+
+    db_session.refresh(host)
+    db_session.refresh(offline_alert)
+    assert host.status == "online"
+    assert offline_alert.status == "resolved"

@@ -6,11 +6,11 @@ class Settings(BaseSettings):
 
     DB_PATH: str = "data/metrics.db"
 
-    HEARTBEAT_INTERVAL: int = 5
-    WARNING_AFTER: int = 10
-    OFFLINE_AFTER: int = 20
+    HEARTBEAT_INTERVAL: int = 60
+    WARNING_AFTER: int = 120
+    OFFLINE_AFTER: int = 150
     ALERT_AFTER_OFFLINE: int = 10
-    CHECK_PERIOD: int = 5
+    CHECK_PERIOD: int = 30
 
     RETENTION_DAYS: int = 7
 

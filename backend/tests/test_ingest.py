@@ -1,5 +1,6 @@
 import copy
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -151,7 +152,24 @@ def test_ingest_extra_fields_are_ignored(client):
 
 
 def test_read_endpoints_return_expected_shape(client):
+    first = copy.deepcopy(EXAMPLE[0])
+    first["timestamp"] = datetime.now(timezone.utc).isoformat()
+    first["host"]["status"] = "online"
+    first["host"]["cpu_percent"] = 95.0
+    second = copy.deepcopy(first)
+    second["source_id"] = "lab-02"
+    second["host"]["name"] = "server-02"
+    second["host"]["status"] = "offline"
+    second["host"]["cpu_percent"] = 10.0
+    second["containers"] = []
+    second["network"] = None
+
+    ingest = client.post("/api/v1/ingest", json=[first, second])
+    assert ingest.status_code == 200
+    assert ingest.json()["accepted"] == 2
+
     hosts = client.get("/api/v1/hosts").json()
+    assert len(hosts) == 2
     assert {"id", "name", "status", "last_seen", "seconds_since_seen"} <= set(hosts[0])
 
     assert client.get("/api/v1/hosts/1").json()["containers"]
@@ -161,12 +179,13 @@ def test_read_endpoints_return_expected_shape(client):
 
     assert len(client.get("/api/v1/hosts?status=offline").json()) == 1
     assert client.get("/api/v1/containers?host_id=1").json()
-    topology = client.get("/api/v1/topology").json()
+    topology = client.get("/api/v1/topology?host_id=1").json()
     assert topology["nodes"] and topology["links"]
-    assert client.get("/api/v1/availability").json()
+    combined_topology = client.get("/api/v1/topology").json()
+    assert all(node["id"].startswith("1:") for node in combined_topology["nodes"])
+    assert len(client.get("/api/v1/availability").json()) == 2
     assert client.get("/api/v1/events?limit=1").json()
-    assert all(
-        alert["status"] == "active"
-        for alert in client.get("/api/v1/alerts?status=active").json()
-    )
-    assert "hosts_total" in client.get("/api/v1/summary").json()
+    assert len(client.get("/api/v1/alerts?status=active").json()) >= 2
+    summary = client.get("/api/v1/summary").json()
+    assert summary["hosts_total"] == 2
+    assert summary["hosts_offline"] == 1

@@ -1,15 +1,15 @@
-from typing import Optional
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
 
-from fastapi import APIRouter, Query
-
-from app import stubs
+from app.db.session import get_db
+from app.services import dashboard_service
 
 router = APIRouter(tags=["alerts"])
 
 
 @router.get("/alerts")
-def list_alerts(status: Optional[str] = Query(None, pattern="^(active|resolved)$")):
-    # TODO: заменить на данные из БД
-    if status:
-        return [a for a in stubs.ALERTS if a["status"] == status]
-    return stubs.ALERTS
+def list_alerts(
+    status: str | None = Query(None, pattern="^(active|resolved)$"),
+    db: Session = Depends(get_db),
+):
+    return dashboard_service.list_alert_rows(db, status)
