@@ -53,7 +53,7 @@ def process(db: Session, report: ReportIn) -> int:
             last_seen=timestamp,
         )
 
-        metrics_repo.add_metric(
+        metric = metrics_repo.add_metric(
             db=db,
             host_id=host.id,
             timestamp=timestamp,
@@ -63,6 +63,8 @@ def process(db: Session, report: ReportIn) -> int:
             net_rx_bytes=host_data.get("net_rx_bytes"),
             net_tx_bytes=host_data.get("net_tx_bytes"),
         )
+
+        evaluate_host(db, host, metric)
 
         if previous_host_status and host.status != previous_host_status:
             events_repo.create_event(
