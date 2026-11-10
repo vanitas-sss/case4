@@ -40,10 +40,8 @@
 Нужен Python 3.11 или новее.
 
 ```powershell
-git checkout main
-git pull origin main
-git checkout feat/maria-database-backed-api
-git pull origin feat/maria-database-backed-api
+git fetch origin
+git switch -c feat/maria-database-backed-api --track origin/feat/maria-database-backed-api
 
 cd backend
 py -3.11 -m venv .venv
@@ -53,7 +51,7 @@ python -m alembic upgrade head
 python -m uvicorn app.main:app --reload
 ```
 
-Если ветка уже локально создана, переключись на неё и обнови через `git pull`. При проверке PR лучше не сливать его в main до ревью.
+Если ветка уже есть локально, вместо команды `git switch -c ... --track ...` выполни `git switch feat/maria-database-backed-api` и `git pull`. При проверке PR не сливай его в main до ревью.
 
 Открыть:
 - Swagger: http://127.0.0.1:8000/docs
