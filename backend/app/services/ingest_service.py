@@ -51,7 +51,7 @@ def process(db: Session, report: ReportIn) -> int:
                 host_data.get("status")
                 or (
                     "online"
-                    if previous_host is not None and previous_host.status == "offline"
+                    if previous_host is not None and previous_host.status in {"offline", "warning"}
                     else (previous_host.status if previous_host else "online")
                 )
             ),
