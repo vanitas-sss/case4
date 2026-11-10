@@ -1,6 +1,6 @@
 # Состояние проекта и запуск
 
-Дата: 2026-11-11. Эта версия описывает backend-изменения в ветке `feat/maria-database-backed-api`.
+Дата: 2026-11-11. Изменения backend объединены с `main` через PR #9.
 
 ## Что реализовано в backend
 
@@ -41,7 +41,8 @@
 
 ```powershell
 git fetch origin
-git switch -c feat/maria-database-backed-api --track origin/feat/maria-database-backed-api
+git switch main
+git pull --ff-only origin main
 
 cd backend
 py -3.11 -m venv .venv
@@ -51,7 +52,7 @@ python -m alembic upgrade head
 python -m uvicorn app.main:app --reload
 ```
 
-Если ветка уже есть локально, вместо команды `git switch -c ... --track ...` выполни `git switch feat/maria-database-backed-api` и `git pull`. При проверке PR не сливай его в main до ревью.
+Перед переключением ветки сохрани незакоммиченные изменения. PR #9 уже объединён с main, поэтому отдельная feature-ветка для запуска не нужна.
 
 Открыть:
 - Swagger: http://127.0.0.1:8000/docs
