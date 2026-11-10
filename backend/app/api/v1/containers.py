@@ -1,18 +1,16 @@
-from typing import Optional
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
 
-from fastapi import APIRouter
-
-from app import stubs
+from app.db.session import get_db
+from app.services import dashboard_service
 
 router = APIRouter(tags=["containers"])
 
 
 @router.get("/containers")
-def list_containers(host_id: Optional[int] = None, status: Optional[str] = None):
-    # TODO: заменить на данные из БД
-    result = stubs.CONTAINERS
-    if host_id is not None:
-        result = [c for c in result if c["host_id"] == host_id]
-    if status:
-        result = [c for c in result if c["status"] == status]
-    return result
+def list_containers(
+    host_id: int | None = None,
+    status: str | None = None,
+    db: Session = Depends(get_db),
+):
+    return dashboard_service.list_container_rows(db, host_id, status)
