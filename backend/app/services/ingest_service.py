@@ -49,7 +49,11 @@ def process(db: Session, report: ReportIn) -> int:
             ip=host_data.get("ip"),
             status=(
                 host_data.get("status")
-                or (previous_host.status if previous_host else "online")
+                or (
+                    "online"
+                    if previous_host is not None and previous_host.status == "offline"
+                    else (previous_host.status if previous_host else "online")
+                )
             ),
             last_seen=timestamp,
         )
