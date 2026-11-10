@@ -1,6 +1,7 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.time import to_utc_naive
 from app.models.ingest_report import IngestReport
 from app.repositories import (
@@ -42,19 +43,35 @@ def process(db: Session, report: ReportIn) -> int:
 
         previous_host_status = previous_host.status if previous_host else None
 
+        reported_status = host_data.get("status")
+        if reported_status is not None:
+            host_status = reported_status
+        elif previous_host is None:
+            host_status = "online"
+        elif (
+            previous_host.status in {"offline", "warning"}
+            and previous_host.last_seen is not None
+        ):
+            # A missing status must not erase a status reported by the source.
+            # However, a sufficiently old heartbeat means the offline/warning
+            # state was caused by the monitor worker, so a fresh report recovers it.
+            stale_seconds = (
+                normalized_timestamp - to_utc_naive(previous_host.last_seen)
+            ).total_seconds()
+            host_status = (
+                "online"
+                if stale_seconds >= settings.WARNING_AFTER
+                else previous_host.status
+            )
+        else:
+            host_status = previous_host.status
+
         host = hosts_repo.upsert_host(
             db=db,
             source_id=source_id,
             name=host_data["name"],
             ip=host_data.get("ip"),
-            status=(
-                host_data.get("status")
-                or (
-                    "online"
-                    if previous_host is not None and previous_host.status in {"offline", "warning"}
-                    else (previous_host.status if previous_host else "online")
-                )
-            ),
+            status=host_status,
             last_seen=timestamp,
         )
 
