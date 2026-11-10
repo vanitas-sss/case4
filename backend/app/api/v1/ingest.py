@@ -2,6 +2,8 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
+
+from app.core.security import verify_agent_token
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -14,7 +16,11 @@ router = APIRouter(tags=["ingest"])
 
 
 @router.post("/ingest")
-def ingest(payload: list[dict], db: Session = Depends(get_db)):
+def ingest(
+    payload: list[dict],
+    db: Session = Depends(get_db),
+    _authorized: None = Depends(verify_agent_token),
+):
     accepted = 0
     errors = []
 
