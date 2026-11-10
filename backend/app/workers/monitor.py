@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.time import utc_now_naive
+from app.core.time import to_utc_naive, utc_now_naive
 from app.db.session import SessionLocal
 from app.models.alert import Alert
 from app.models.host import Host
@@ -13,7 +13,7 @@ from app.workers.cleanup import cleanup_old_records
 
 
 def check_stale_hosts(db: Session, now: datetime | None = None) -> int:
-    current = now or utc_now_naive()
+    current = to_utc_naive(now) if now is not None else utc_now_naive()
     changed = 0
     hosts = db.query(Host).all()
     for host in hosts:
