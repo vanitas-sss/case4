@@ -23,6 +23,10 @@ Base URL локально: `http://127.0.0.1:8000/api/v1`.
 | `GET /alerts` | `status=active\|resolved` optional | Список тревог |
 | `GET /summary` | — | Сводные счётчики |
 
+
+
+Для `GET /topology?host_id=ID` поле `id` узла остаётся исходным внешним ID из отчёта агента. Для общей топологии без `host_id` ID формируется как `host_id:external_id`, чтобы одинаковые ID узлов разных серверов не конфликтовали. У узла дополнительно есть `external_id` и `host_id`; у связи — `host_id`.
+
 ## Объект сервера
 
 ```json
