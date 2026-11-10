@@ -181,6 +181,8 @@ def test_read_endpoints_return_expected_shape(client):
     assert client.get("/api/v1/containers?host_id=1").json()
     topology = client.get("/api/v1/topology?host_id=1").json()
     assert topology["nodes"] and topology["links"]
+    combined_topology = client.get("/api/v1/topology").json()
+    assert all(node["id"].startswith("1:") for node in combined_topology["nodes"])
     assert len(client.get("/api/v1/availability").json()) == 2
     assert client.get("/api/v1/events?limit=1").json()
     assert len(client.get("/api/v1/alerts?status=active").json()) >= 2
