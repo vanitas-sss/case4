@@ -26,9 +26,11 @@ engine = create_engine(
 
 
 @event.listens_for(engine, "connect")
-def _enable_sqlite_foreign_keys(connection, _record):
+def _configure_sqlite(connection, _record):
     cursor = connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
+    # WAL permits readers during writes; in-memory SQLite does not support WAL.
+    cursor.execute("PRAGMA journal_mode=WAL")
     cursor.close()
 
 
