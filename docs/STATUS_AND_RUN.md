@@ -1,134 +1,180 @@
-# Состояние проекта и запуск
+# Backend Марии: запуск, проверка и задачи команды
 
-Дата: 2026-11-11. Эта версия описывает backend-изменения в ветке `feat/maria-database-backed-api`.
+Дата: 11 ноября 2026. Ветка: `feat/maria-monitoring-completion`.
 
-## Что реализовано в backend
+## 1. Что готово
 
-- FastAPI API под префиксом `/api/v1`.
-- `POST /api/v1/ingest`: принимает массив отчётов, проверяет Pydantic-схемой и сохраняет данные в SQLite.
-- GET-маршруты серверов, метрик, контейнеров, топологии, доступности, событий, тревог и сводки теперь читают реальные таблицы SQLite, а не `app/stubs.py`.
-- История метрик ограничена максимум 500 точками на ответ, чтобы не перегружать браузер.
-- Состояние сервера рассчитывается по времени последнего отчёта. Пороги задаются настройками.
-- Базовые тревоги: CPU >= 90% (warning) и статус offline от источника/heartbeat (critical). Повторные уведомления не создаются, пока тревога уже активна; при восстановлении тревога закрывается.
-- Фоновая проверка heartbeat запускается при старте FastAPI; периодическая очистка старых записей запускается раз в час.
-- Тесты расширены для GET API, жизненного цикла тревог и перехода хоста offline/online.
-- Добавлен документ API-контракта и GitHub Actions workflow для запуска backend-тестов на Pull Request.
+В `main` уже были FastAPI, модели SQLite, миграции Alembic, приём отчётов и GET API.
+Эта доработка завершает базовый цикл мониторинга:
 
-## Что пока не входит в эту доработку
+- время получения отчёта используется для heartbeat, время из JSON — для метрик и порядка снимков;
+- повторные и запоздавшие снимки не затирают новые данные;
+- фоновая проверка сохраняет в историю как успешные проверки, так и простой;
+- offline alert создаётся после `OFFLINE_AFTER + ALERT_AFTER_OFFLINE` без новых дублей и закрывается после восстановления;
+- остановленный контейнер создаёт `container_stopped`; `running` закрывает тревогу;
+- карта возвращает статус сервера и контейнера из текущих данных; при потере связи контейнер имеет `unknown`;
+- `POST /import` загружает JSON-файл того же контракта, что `/ingest`;
+- разрешены запросы из локального Vite, включены WAL и ожидание блокировки SQLite;
+- операции фонового мониторинга и очистки работают в отдельном потоке со своей сессией БД, ошибки записываются в журнал;
+- версии прямых зависимостей закреплены в `backend/requirements.txt`.
 
-- Telegram и webhook-уведомления не подключены. Тревоги доступны через `GET /api/v1/alerts` и события через `GET /api/v1/events`.
-- HTTP/TCP checks произвольных учебных стендов и отдельная таблица результатов проверок пока не реализованы.
-- Управление пользовательскими правилами алертинга через CRUD API пока не реализовано: текущие два правила базовые и фиксированные.
-- Ручное редактирование топологии и экспорт PlantUML пока не реализованы.
-- Интеграция с агентом требует проверки по фактическому JSON от Германа. Текущий контракт описан в `backend/app/schemas/ingest.py` и `backend/examples/ingest.example.json`.
-- Frontend, Docker Compose и полная сборка всего проекта остаются задачами других участников.
+Формат существующих GET API и структура таблиц сохранены. Новых миграций не требуется.
+Алерты и события видны в API; Telegram, произвольные HTTP/TCP проверки и редактор правил в этот прототип не входят.
+Настоящий агент собирает команда кейса 1. Наша команда использует `mock-data/`.
+Frontend и Docker Compose пока отсутствуют: запуск ниже проверяет backend и генератор, готового сайта ещё нет.
 
-## Настройки мониторинга
+## 2. Как идут данные
 
-Файл: `backend/app/core/config.py`.
+`mock-data/generator.py → POST /api/v1/ingest → проверка ReportIn → SQLite → GET /api/v1/... → frontend`
 
-- `HEARTBEAT_INTERVAL=60` — рекомендуемый интервал отправки агентом.
-- `WARNING_AFTER=120` — после этого времени без отчёта состояние становится warning.
-- `OFFLINE_AFTER=150` — после этого времени состояние становится offline.
-- `CHECK_PERIOD=30` — период фоновой проверки.
-- `RETENTION_DAYS=7` — срок хранения метрик, событий и heartbeat-проверок.
+Backend и frontend не читают Python-файлы друг друга. Их общий язык — HTTP и JSON.
+Главные источники формата: `backend/app/schemas/ingest.py`, `backend/examples/ingest.example.json`, `docs/API_V1.md`.
 
-Для локального генератора, который отправляет отчёт каждые 5 секунд, эти значения не мешают проверке. Для изменения параметров создай `.env` в каталоге `backend` и укажи нужные переменные. Не добавляй реальные токены в Git.
+| Данные | Значение |
+|---|---|
+| `source_id` + `host.name` | Вместе определяют сервер. Имена могут повторяться у разных источников |
+| `timestamp` | Время снимка; предпочтительно ISO 8601 UTC с `Z`. Для следующего обновления должно увеличиваться |
+| `host.status` | Состояние со слов источника; heartbeat может ухудшить его после таймаута |
+| `last_seen` в GET | Время получения нового снимка backend, а не время внутри файла |
+| `cpu_percent`, `memory_percent`, `disk_percent` | Числа 0–100 или `null`, если метрики нет |
+| `net_rx_bytes`, `net_tx_bytes` | Накопительные счётчики байтов, не скорость и не проценты |
+| `containers[].id` | ID контейнера у источника; в GET есть отдельный числовой ID базы |
+| `network.nodes`, `network.links` | Снимок графа. Концы связей должны существовать в nodes |
+| `accepted`, `rejected`, `errors` | Результат обработки отчётов; HTTP 200 сам по себе не означает, что все приняты |
 
-## Запуск backend на Windows PowerShell
+Повтор с тем же timestamp принимается без дублирования данных и не продлевает heartbeat.
+Импорт старого, но нового для этого сервера снимка устанавливает время получения на сейчас: это проверка связи с отправителем, а не доказательство актуальности старых метрик.
 
-Нужен Python 3.11 или новее.
+## 3. Запуск на Windows PowerShell
+
+Установить Git и Python 3.11 или 3.12. SQLite входит в Python; отдельный сервер БД и Docker для этого запуска не нужны.
+Если репозиторий уже скачан, начните с `cd case4` и `git fetch origin`.
 
 ```powershell
+git clone https://github.com/vanitas-sss/case4.git
+cd case4
 git fetch origin
-git switch -c feat/maria-database-backed-api --track origin/feat/maria-database-backed-api
-
+git switch feat/maria-monitoring-completion
 cd backend
 py -3.11 -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m alembic upgrade head
-python -m uvicorn app.main:app --reload
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+.venv\Scripts\python.exe -m alembic upgrade head
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
 
-Если ветка уже есть локально, вместо команды `git switch -c ... --track ...` выполни `git switch feat/maria-database-backed-api` и `git pull`. При проверке PR не сливай его в main до ревью.
+Если Python 3.12 установлен вместо 3.11, замените `py -3.11` на `py -3.12`.
+Команды вызывают Python напрямую из venv: активировать окружение и менять ExecutionPolicy не требуется.
+`Copy-Item` выполняйте только при первом запуске: существующий `.env` с личными настройками сохраняйте.
+Миграции также автоматически выполняются при старте. Рабочий каталог должен быть `backend`.
+Используйте один процесс Uvicorn: несколько `--workers` запустят несколько одинаковых фоновых проверок.
 
-Открыть:
-- Swagger: http://127.0.0.1:8000/docs
-- Health: http://127.0.0.1:8000/api/v1/health
+Открыть Swagger: http://127.0.0.1:8000/docs
+Проверка процесса: http://127.0.0.1:8000/api/v1/health
 
-При старте FastAPI выполняются миграции и запускаются два фоновых цикла: heartbeat (каждые 30 секунд) и очистка (каждый час).
+## 4. Запустить генератор
 
-## Проверка POST и реального чтения
-
-Оставь backend запущенным. Во втором PowerShell из корня репозитория:
+Откройте второй PowerShell в корне `case4`:
 
 ```powershell
 cd mock-data
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python generator.py --url http://127.0.0.1:8000/api/v1/ingest --interval 5
+py -3.11 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe generator.py --url http://127.0.0.1:8000/api/v1/ingest --interval 5
 ```
 
-Затем открой Swagger:
-1. Отправь JSON-массив из `backend/examples/ingest.example.json` в `POST /api/v1/ingest`.
-2. Ожидаемый результат: `accepted: 1`, `rejected: 0`.
-3. Открой `GET /api/v1/hosts`: должен появиться отправленный хост.
-4. Открой `GET /api/v1/hosts/1/metrics?period=1h`: появятся реальные точки метрик.
-5. Проверь `GET /api/v1/containers`, `/api/v1/topology?host_id=1`, `/api/v1/availability`, `/api/v1/events`, `/api/v1/alerts`, `/api/v1/summary`.
+Он отправляет отчёты раз в 5 секунд. Не запускайте одновременно сценарий и второй обычный генератор для тех же серверов.
+Прочитайте `/hosts`, возьмите реальный `id` сервера и проверьте:
 
-ID хоста может быть не 1, если в локальной базе уже есть записи. Сначала возьми ID из `GET /hosts`.
+| Адрес в Swagger | Ожидаемый результат |
+|---|---|
+| `GET /hosts` | Серверы генератора с процентами нагрузки |
+| `GET /hosts/{id}` | Карточка с контейнерами |
+| `GET /hosts/{id}/metrics?period=1h` | История метрик, не более 500 точек |
+| `GET /containers` | Контейнеры из отчётов |
+| `GET /topology` | Узлы и связи; каждый конец связи есть среди узлов |
+| `GET /summary` | Счётчики серверов, контейнеров и алертов |
+| `GET /availability?period=24h` | Доля успешных проверок, `null` при отсутствии истории |
+| `GET /events` | Изменения статусов и алертов |
+| `GET /alerts?status=active` | Активные тревоги |
 
-Чтобы проверить CPU alert, отправь отчёт с `host.cpu_percent = 95`. В `GET /alerts?status=active` появится `cpu_high`. Отправь следующий отчёт с CPU ниже 90 — тревога должна стать resolved.
+Все адреса таблицы имеют префикс `/api/v1`.
 
-Чтобы проверить offline:
-1. Останови генератор Ctrl+C.
-2. Подожди более 150 секунд плюс до 30 секунд на фоновую проверку.
-3. Проверь `GET /hosts` и `GET /alerts?status=active`.
-4. Снова запусти генератор. После нового отчёта сервер вернётся в online, а offline alert закроется.
+## 5. Проверить отказ и восстановление
 
-## Тесты backend
+При скопированном `.env.example`: `WARNING_AFTER=10`, `OFFLINE_AFTER=20`, `ALERT_AFTER_OFFLINE=10`, `CHECK_PERIOD=5`.
+Без `.env` действуют более длинные значения из `config.py`: 120/150/10/30 секунд.
 
-В отдельном терминале:
+1. Дайте генератору поработать 15 секунд и остановите его `Ctrl+C`.
+2. Через 10 секунд после последнего отчёта сервер станет warning; через 20 — offline. Фоновый цикл может добавить до 5 секунд задержки.
+3. Через 30–35 секунд появится одна активная тревога `host_offline` для каждого замолчавшего сервера.
+4. У карты сервер offline, у его контейнеров unknown: отсутствие связи не доказывает остановку контейнера.
+5. Повторяйте GET: новых одинаковых активных тревог не должно быть, uptime будет снижаться.
+6. Запустите генератор снова. После свежего отчёта статус online, тревога resolved, появляется событие восстановления.
+
+Для проверки CPU и контейнера остановите генератор, возьмите пример JSON в Swagger `POST /ingest`, поставьте текущий `timestamp`, CPU=95 и статус контейнера `stopped`.
+Будут `cpu_high` и `container_stopped`. Отправьте следующий снимок с большим timestamp, CPU=40 и контейнером `running`: обе тревоги закроются.
+CPU проверяется по одному снимку, порог >=90%, выдержка времени для CPU не реализована.
+`target` контейнерной тревоги — строка с числовым ID контейнера базы, имя контейнера есть в message.
+
+В `POST /import` выберите файл `backend/examples/ingest.example.json`. Ожидается `accepted=1`, `rejected=0`.
+Повторная загрузка не создаёт второй сервер или метрику. Файл максимум 2 МиБ, кодировка UTF-8, верхний уровень — массив.
+Произвольный JSON кейса 1 автоматически не распознаётся. Для него нужен реальный пример и согласованный адаптер.
+
+## 6. Автоматические проверки
+
+Третий терминал, из корня проекта:
 
 ```powershell
 cd backend
-.venv\Scripts\Activate.ps1
-python -m pytest -q
+.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe -m alembic check
 ```
 
-GitHub Actions также запускает эту команду автоматически для Pull Request. Если CI упал, Pull Request нельзя считать проверенным, пока причина не исправлена.
+Тесты используют временные базы, не удаляют рабочие метрики. CI проверяет Python 3.11 и 3.12.
+Один успешный прогон не гарантирует отсутствие любых ошибок; перед демонстрацией нужна проверка всего пути с готовым frontend.
 
-## API-контракт для frontend
+## 7. Библиотеки и установка
 
-Полное описание полей и параметров находится в `docs/API_V1.md`. Ключевые адреса:
-- `GET /api/v1/hosts`
-- `GET /api/v1/hosts/{id}`
-- `GET /api/v1/hosts/{id}/metrics?period=1h|6h|24h`
-- `GET /api/v1/containers`
-- `GET /api/v1/topology?host_id={id}`
-- `GET /api/v1/availability?period=24h`
-- `GET /api/v1/events?limit=50`
-- `GET /api/v1/alerts?status=active`
-- `GET /api/v1/summary`
+| Библиотека/технология | Для чего | Как устанавливается |
+|---|---|---|
+| FastAPI, Pydantic (зависимость FastAPI) | Маршруты, проверка JSON, Swagger | `pip install -r requirements.txt` |
+| Uvicorn | HTTP-сервер приложения | Та же команда |
+| SQLAlchemy, SQLite | Запись и чтение данных | SQLAlchemy той же командой, SQLite в Python |
+| Alembic | Обновление схемы существующей БД | Та же команда |
+| pydantic-settings | Настройки из `.env` | Та же команда |
+| python-multipart | Загрузка JSON-файла через форму Swagger | Та же команда |
+| httpx, pytest | Клиент API и автоматические тесты | Та же команда |
+| requests | Отправка из генератора | requirements.txt в `mock-data` |
+| asyncio, logging, json | Фоновые циклы, журнал, JSON | Встроены в Python |
 
-Время в ответах — ISO 8601 UTC с `Z`. Проценты — числа 0–100. Frontend не должен подключаться к SQLite напрямую. Для Vite можно настроить dev proxy `/api -> http://127.0.0.1:8000`.
+Это открытые библиотеки. Платные службы и готовая система мониторинга не добавлены.
+Telegram оставлен опциональным и не подключён. Все базовые уведомления доступны на сайте через API алертов.
+Официальные темы для изучения: FastAPI Request Files и CORS, SQLAlchemy Session Basics, SQLite WAL, Alembic Tutorial, pytest fixtures, heartbeat monitoring.
+Ссылки: https://fastapi.tiangolo.com/tutorial/request-files/ ; https://fastapi.tiangolo.com/tutorial/cors/ ; https://docs.sqlalchemy.org/en/20/orm/session_basics.html ; https://sqlite.org/wal.html
 
-## Кто что делает дальше
+## 8. Что дальше делать команде
 
-Назначения ниже соответствуют плану реализации проекта:
+| Участник | Следующее действие | Проверка готовности |
+|---|---|---|
+| Мария | Проверить PR, поддерживать ReportIn и API; согласовать реальный формат кейса 1 | Генератор, импорт, алерты и восстановление проходят по инструкции |
+| Марина | Проверить WAL, миграции и очистку, следить за индексами и ростом БД | `alembic check` и тесты проходят на существующей и новой БД |
+| Герман | Подготовить запуск и Docker Compose; получить настоящий JSON кейса 1 и согласовать адаптер | Чистый запуск по README, пример кейса 1 преобразуется в ReportIn |
+| Иван | Проверить генератор и сценарий отказа, повторные и неверные отчёты; провести нагрузочный прогон | Зафиксировать число источников, период отправки, время ответов и ресурсы |
+| Артём | Создать frontend, общий API-клиент, страницы и граф | Данные приходят из API, есть состояния загрузки, ошибки и пустого списка |
+| Али | Компоненты карточек, таблиц, графиков и ошибок; помочь с nginx/Docker | Компоненты принимают props, нет отдельного запроса на каждую карточку |
+| Сергей | Макеты и легенда статусов серверов, контейнеров и линий | Различимы online/warning/offline/unknown, stopped/running и отсутствующие метрики |
 
-- **Мария (backend):** поддерживать API-контракт; после интеграции проверить JSON агента; дальше отдельными задачами реализовать HTTP/TCP checks, Telegram/webhook, CRUD alert rules, ручное редактирование/экспорт топологии и защиту ingest токеном. Не переписывать готовые GET-маршруты без согласования с frontend.
-- **Герман (agent):** файлы `agent/agent/main.py`, `agent/agent/config.py`, `agent/agent/sender.py`, `agent/agent/collectors/host.py`, `containers.py`, `events.py`, `connections.py`; `agent/requirements.txt`, `agent/config.example.yaml`, `agent/install_agent.sh`. Отправлять отчёт на `POST /api/v1/ingest` и сверить JSON с `backend/examples/ingest.example.json`.
-- **Артём (frontend/API):** `frontend/src/api/client.js`, `frontend/src/api/hooks.js`, `frontend/src/pages/`, `frontend/src/layout/`, `frontend/src/App.jsx`, `frontend/src/main.jsx`, `frontend/package.json`, `frontend/vite.config.js`. Использовать только маршруты из `docs/API_V1.md`.
-- **Али (компоненты):** `frontend/src/components/StatusBadge.jsx`, `HostCard.jsx`, `ContainerTable.jsx`, `MetricChart.jsx`, `EventList.jsx`, `AlertTable.jsx`, `UptimeBar.jsx`, `Loader.jsx`, `EmptyState.jsx`, `ErrorBox.jsx`; компонентам передавать данные через props, не делать отдельные запросы внутри каждой карточки.
-- **Сергей (дизайн):** макеты страниц Dashboard, Hosts, Containers, Events, Alerts, Availability и Topology; передать frontend единые цвета, размеры, состояния и адаптивные правила. Его макеты должны соответствовать полям API-контракта.
+## 9. Совместимость и ограничения
 
-## Правила совместной работы
-
-- JSON входа агента задаётся Pydantic-моделью `ReportIn` и примером `backend/examples/ingest.example.json`.
-- JSON ответов сайта описан в `docs/API_V1.md`. Изменение названий полей согласовывать с Артёмом до изменения кода.
-- Backend/frontend общаются только по HTTP и JSON. Не передавать Python-модели SQLAlchemy во frontend.
-- Время отправлять в ISO 8601 с часовым поясом; предпочтительно UTC.
-- Не коммитить `.env`, `.venv`, `metrics.db`, `node_modules` и реальные токены.
+- Не менять поля JSON без согласования с frontend и генератором. `/ingest` принимает массив, не объект с ключом `ingest_request`.
+- На общей карте ID имеют префикс `host_id:`, например `1:frontend`. При фильтре `host_id` ID локальные. Считайте ID непрозрачными строками и используйте ссылки из того же ответа.
+- Vite: либо proxy `/api` на `http://127.0.0.1:8000`, либо базовый URL API с портом 8000. CORS по умолчанию разрешён только для localhost/127.0.0.1:5173.
+- Для другого адреса задайте `CORS_ORIGINS=["http://адрес:порт"]` в `.env` и перезапустите backend.
+- Uptime — доля успешных периодических проверок (online), а не точное измерение времени работы. Старые записи из прежнего ingest могут влиять на показатель до очистки истории.
+- Пустой список контейнеров сохраняет ранее известные контейнеры. Полный снимок с удалением исчезнувших контейнеров пока не поддерживается.
+- Храним историю 7 дней, очищаем раз в час. Период проверки 5 секунд удобен для демонстрации; 30 секунд снижает число записей для длительного запуска.
+- Backend рассчитан на учебный стенд и один процесс. Аутентификации нет; перед публичным размещением нужен отдельный этап защиты и ограничений запросов.
+- Не удаляйте рабочую БД для обновления: используйте Alembic. Не добавляйте `.env`, `.venv`, БД и токены в Git.
+- Если порт 8000 занят, задайте Uvicorn `--port 8001` и замените порт в URL генератора и frontend.
+- Если данные не обновляются, проверьте accepted/rejected/errors и увеличение timestamp. После изменения `.env` перезапустите backend.

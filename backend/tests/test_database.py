@@ -134,7 +134,7 @@ def test_repeated_ingest_updates_host_and_container_but_keeps_metric_history(
         db_session.query(AvailabilityCheck)
         .filter(AvailabilityCheck.host_id == host_id)
         .count()
-        == 2
+        == 1
     )
 
 
@@ -420,7 +420,8 @@ def test_out_of_order_report_does_not_overwrite_newer_state(db_session):
     metrics = db_session.query(Metric).filter(Metric.host_id == host_id).all()
 
     assert host.status == "online"
-    assert host.last_seen == newer.timestamp.replace(tzinfo=None)
+    assert host.last_seen > newer.timestamp.replace(tzinfo=None)
+    assert max(m.timestamp for m in metrics) == newer.timestamp.replace(tzinfo=None)
     assert len(metrics) == 2
     assert max(metric.timestamp for metric in metrics) == newer.timestamp.replace(
         tzinfo=None
@@ -623,6 +624,9 @@ def test_heartbeat_worker_marks_host_offline_and_ingest_resolves_alert(db_sessio
     report.host.status = "online"
     host_id = ingest_service.process(db_session, report)
 
+    host = db_session.get(Host, host_id)
+    host.last_seen -= timedelta(seconds=200)
+    db_session.commit()
     changed = check_stale_hosts(db_session, now=datetime.now(UTC))
     assert changed == 1
 

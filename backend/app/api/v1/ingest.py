@@ -1,7 +1,8 @@
 import logging
+import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -62,3 +63,18 @@ def ingest(payload: list[dict], db: Session = Depends(get_db)):
         "received_at": datetime.now(timezone.utc).isoformat(),
         "errors": errors,
     }
+
+
+@router.post("/import")
+def import_reports(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Load our JSON contract; arbitrary case-1 formats require an agreed adapter."""
+    content = file.file.read(2 * 1024 * 1024 + 1)
+    if len(content) > 2 * 1024 * 1024:
+        raise HTTPException(413, "Файл превышает 2 МиБ")
+    try:
+        payload = json.loads(content.decode("utf-8-sig"))
+    except (ValueError, UnicodeError):
+        raise HTTPException(400, "Нужен корректный JSON в UTF-8")
+    if not isinstance(payload, list) or any(not isinstance(r, dict) for r in payload):
+        raise HTTPException(422, "Ожидается массив JSON-отчётов по контракту /ingest")
+    return ingest(payload, db)
