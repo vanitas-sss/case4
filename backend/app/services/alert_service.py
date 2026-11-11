@@ -5,7 +5,6 @@ from app.repositories import events_repo
 
 
 def evaluate_host(db: Session, host, metric) -> None:
-    """Create or resolve simple alerts from the latest received host report."""
     conditions = {
         "host_offline": {
             "active": host.status == "offline",
@@ -64,7 +63,6 @@ def evaluate_host(db: Session, host, metric) -> None:
 
 
 def evaluate_container(db: Session, host, container) -> None:
-    """One active alert per container; IDs are stable even after a rename."""
     from app.core.time import utc_now_naive
 
     target = str(container.id)
@@ -72,7 +70,7 @@ def evaluate_container(db: Session, host, container) -> None:
         host_id=host.id, rule="container_stopped", target=target, status="active"
     ).first()
     if host.status != "online":
-        return  # No evidence about the container while its host is unavailable.
+        return  
     if container.status in {"stopped", "exited", "dead"} and alert is None:
         message = f"Контейнер {container.name} на {host.name} остановлен"
         db.add(Alert(host_id=host.id, rule="container_stopped", target=target,

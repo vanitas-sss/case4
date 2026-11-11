@@ -32,7 +32,6 @@ def process(db: Session, report: ReportIn) -> int:
             .order_by(Metric.timestamp.desc()).first()
             if previous_host is not None else None
         )
-        # Report time orders snapshots; reception time drives heartbeat.
         if latest_metric is not None and normalized_timestamp <= latest_metric.timestamp:
             return previous_host.id
 
@@ -56,9 +55,7 @@ def process(db: Session, report: ReportIn) -> int:
             previous_host.status in {"offline", "warning"}
             and previous_host.last_seen is not None
         ):
-            # A missing status must not erase a status reported by the source.
-            # However, a sufficiently old heartbeat means the offline/warning
-            # state was caused by the monitor worker, so a fresh report recovers it.
+
             stale_seconds = (
                 received_at - to_utc_naive(previous_host.last_seen)
             ).total_seconds()
