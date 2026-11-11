@@ -1,8 +1,8 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-pydantic-settings
-httpx
-python-multipart
-pytest
-alembic
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+sqlalchemy==2.1.8
+pydantic-settings==2.15.0
+httpx==0.28.1
+python-multipart==0.0.32
+pytest==9.2.0
+alembic==1.20.1

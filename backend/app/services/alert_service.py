@@ -61,3 +61,28 @@ def evaluate_host(db: Session, host, metric) -> None:
                 event_type="alert_resolved",
                 message=f"Условие тревоги {rule_name} для {host.name} больше не выполняется",
             )
+
+
+def evaluate_container(db: Session, host, container) -> None:
+    """One active alert per container; IDs are stable even after a rename."""
+    from app.core.time import utc_now_naive
+
+    target = str(container.id)
+    alert = db.query(Alert).filter_by(
+        host_id=host.id, rule="container_stopped", target=target, status="active"
+    ).first()
+    if host.status != "online":
+        return  # No evidence about the container while its host is unavailable.
+    if container.status in {"stopped", "exited", "dead"} and alert is None:
+        message = f"Контейнер {container.name} на {host.name} остановлен"
+        db.add(Alert(host_id=host.id, rule="container_stopped", target=target,
+                     severity="warning", status="active", message=message))
+        events_repo.create_event(db, host_id=host.id, container_id=container.id,
+                                 event_type="alert_opened", message=message)
+        db.flush()
+    elif container.status == "running" and alert is not None:
+        alert.status = "resolved"
+        alert.resolved_at = utc_now_naive()
+        events_repo.create_event(db, host_id=host.id, container_id=container.id,
+                                 event_type="alert_resolved",
+                                 message=f"Контейнер {container.name} снова работает")

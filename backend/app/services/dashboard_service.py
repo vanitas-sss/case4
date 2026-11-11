@@ -25,7 +25,7 @@ def host_status(host: Host, now: datetime | None = None) -> str:
     if host.last_seen is None:
         return "unknown"
     age = max(0, (current - host.last_seen.replace(tzinfo=None)).total_seconds())
-    if age >= settings.OFFLINE_AFTER:
+    if host.status == "offline" or age >= settings.OFFLINE_AFTER:
         return "offline"
     if age >= settings.WARNING_AFTER:
         return "warning"
@@ -155,6 +155,24 @@ def list_topology(db: Session, host_id: int | None = None, node_type: str | None
     def public_id(owner_id: int, external_id: str) -> str:
         return external_id if host_id is not None else f"{owner_id}:{external_id}"
 
+    owners = {h.id: h for h in db.query(Host).all()}
+    containers = db.query(Container).all()
+    container_statuses = {}
+    for c in containers:
+        container_statuses[(c.host_id, c.docker_id)] = c.status
+        container_statuses[(c.host_id, c.name)] = c.status
+
+    def node_status(node):
+        owner = owners.get(node.host_id)
+        status = host_status(owner) if owner else "unknown"
+        if node.type == "server":
+            return status
+        if status != "online":
+            return "unknown"
+        if node.type == "container":
+            return container_statuses.get((node.host_id, node.external_id), node.status or "unknown")
+        return node.status or "unknown"
+
     allowed = {(node.host_id, node.external_id) for node in nodes}
     links = [
         link for link in link_query.order_by(NetworkLink.host_id.asc(), NetworkLink.id.asc()).all()
@@ -169,7 +187,7 @@ def list_topology(db: Session, host_id: int | None = None, node_type: str | None
                 "host_id": node.host_id,
                 "label": node.label,
                 "type": node.type,
-                "status": node.status,
+                "status": node_status(node),
                 "ip": node.ip,
             }
             for node in nodes

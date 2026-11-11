@@ -2,7 +2,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.time import to_utc_naive
+from app.core.time import to_utc_naive, utc_now_naive
+from app.models.metric import Metric
 from app.models.ingest_report import IngestReport
 from app.repositories import (
     availability_repo,
@@ -12,7 +13,7 @@ from app.repositories import (
     metrics_repo,
     network_repo,
 )
-from app.services.alert_service import evaluate_host
+from app.services.alert_service import evaluate_host, evaluate_container
 from app.schemas.ingest import ReportIn
 
 
@@ -23,13 +24,16 @@ def process(db: Session, report: ReportIn) -> int:
     source_id = data["source_id"]
     normalized_timestamp = to_utc_naive(timestamp)
 
+    received_at = utc_now_naive()
     try:
         previous_host = hosts_repo.get_by_name(db, source_id, host_data["name"])
-        if (
-            previous_host is not None
-            and previous_host.last_seen is not None
-            and normalized_timestamp <= to_utc_naive(previous_host.last_seen)
-        ):
+        latest_metric = (
+            db.query(Metric).filter(Metric.host_id == previous_host.id)
+            .order_by(Metric.timestamp.desc()).first()
+            if previous_host is not None else None
+        )
+        # Report time orders snapshots; reception time drives heartbeat.
+        if latest_metric is not None and normalized_timestamp <= latest_metric.timestamp:
             return previous_host.id
 
         db.add(
@@ -56,7 +60,7 @@ def process(db: Session, report: ReportIn) -> int:
             # However, a sufficiently old heartbeat means the offline/warning
             # state was caused by the monitor worker, so a fresh report recovers it.
             stale_seconds = (
-                normalized_timestamp - to_utc_naive(previous_host.last_seen)
+                received_at - to_utc_naive(previous_host.last_seen)
             ).total_seconds()
             host_status = (
                 "online"
@@ -72,7 +76,7 @@ def process(db: Session, report: ReportIn) -> int:
             name=host_data["name"],
             ip=host_data.get("ip"),
             status=host_status,
-            last_seen=timestamp,
+            last_seen=received_at,
         )
 
         metric = metrics_repo.add_metric(
@@ -121,8 +125,10 @@ def process(db: Session, report: ReportIn) -> int:
                 ),
                 ip=item.get("ip"),
                 networks=item.get("networks"),
-                last_seen=timestamp,
+                last_seen=received_at,
             )
+
+            evaluate_container(db, host, container)
 
             if (
                 previous_container_status
@@ -140,12 +146,13 @@ def process(db: Session, report: ReportIn) -> int:
                     timestamp=timestamp,
                 )
 
-        availability_repo.add_check(
-            db,
-            host_id=host.id,
-            is_online=host.status not in {"offline", "unknown"},
-            checked_at=timestamp,
-        )
+        if previous_host is None:
+            availability_repo.add_check(
+                db,
+                host_id=host.id,
+                is_online=host.status == "online",
+                checked_at=received_at,
+            )
 
         network_data = data.get("network")
         if network_data is not None:
