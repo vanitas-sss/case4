@@ -3,10 +3,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, event
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import sessionmaker
-
 from app.db.base import Base
 from app.models import (
     Alert,
@@ -20,9 +16,12 @@ from app.models import (
     NetworkNode,
 )
 from app.schemas.ingest import ReportIn
-from app.services import alert_service, ingest_service
+from app.services import ingest_service
 from app.workers.cleanup import cleanup_old_records
 from app.workers.monitor import check_stale_hosts
+from sqlalchemy import create_engine, event
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import sessionmaker
 
 
 @pytest.fixture()
@@ -617,7 +616,6 @@ def test_offline_host_creates_critical_alert(db_session):
     assert alert.severity == "critical"
 
 
-
 def test_heartbeat_worker_marks_host_offline_and_ingest_resolves_alert(db_session):
     report = _example_report()
     report.timestamp = datetime.now(UTC) - timedelta(seconds=200)
@@ -648,3 +646,18 @@ def test_heartbeat_worker_marks_host_offline_and_ingest_resolves_alert(db_sessio
     db_session.refresh(offline_alert)
     assert host.status == "online"
     assert offline_alert.status == "resolved"
+
+
+def test_missing_cpu_does_not_resolve_active_alert(db_session):
+    report = _example_report()
+    report.host.cpu_percent = 95
+    host_id = ingest_service.process(db_session, report)
+    report.timestamp += timedelta(seconds=5)
+    report.host.cpu_percent = None
+    ingest_service.process(db_session, report)
+    assert (
+        db_session.query(Alert)
+        .filter_by(host_id=host_id, rule="cpu_high", status="active")
+        .count()
+        == 1
+    )

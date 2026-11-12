@@ -1,10 +1,7 @@
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
-
 from app.core.config import settings
 from app.core.time import to_utc_naive, utc_now_naive
-from app.models.metric import Metric
 from app.models.ingest_report import IngestReport
+from app.models.metric import Metric
 from app.repositories import (
     availability_repo,
     containers_repo,
@@ -13,8 +10,10 @@ from app.repositories import (
     metrics_repo,
     network_repo,
 )
-from app.services.alert_service import evaluate_host, evaluate_container
 from app.schemas.ingest import ReportIn
+from app.services.alert_service import evaluate_container, evaluate_host
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 
 def process(db: Session, report: ReportIn) -> int:
@@ -28,11 +27,17 @@ def process(db: Session, report: ReportIn) -> int:
     try:
         previous_host = hosts_repo.get_by_name(db, source_id, host_data["name"])
         latest_metric = (
-            db.query(Metric).filter(Metric.host_id == previous_host.id)
-            .order_by(Metric.timestamp.desc()).first()
-            if previous_host is not None else None
+            db.query(Metric)
+            .filter(Metric.host_id == previous_host.id)
+            .order_by(Metric.timestamp.desc())
+            .first()
+            if previous_host is not None
+            else None
         )
-        if latest_metric is not None and normalized_timestamp <= latest_metric.timestamp:
+        if (
+            latest_metric is not None
+            and normalized_timestamp <= latest_metric.timestamp
+        ):
             return previous_host.id
 
         db.add(
@@ -55,7 +60,6 @@ def process(db: Session, report: ReportIn) -> int:
             previous_host.status in {"offline", "warning"}
             and previous_host.last_seen is not None
         ):
-
             stale_seconds = (
                 received_at - to_utc_naive(previous_host.last_seen)
             ).total_seconds()

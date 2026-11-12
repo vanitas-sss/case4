@@ -9,6 +9,7 @@
   python generator.py --dry-run --once        # только напечатать JSON
 Управление вручную: правьте state.json прямо во время работы.
 """
+
 import argparse
 import json
 import os
@@ -47,15 +48,14 @@ class Simulator:
         self.servers = cfg["servers"]
         self.containers = load_json("containers.json")
         self.traffic_links = load_json("network.json")["traffic_links"]
-        self.cur = {}      # server -> {cpu, memory, disk}
-        self.net = {}      # server -> [rx, tx] накопительные счётчики
+        self.cur = {}
+        self.net = {}
         for s in self.servers:
             self.cur[s["name"]] = {
                 k: self.rng.uniform(*s[k]) for k in ("cpu", "memory", "disk")
             }
             self.net[s["name"]] = [10_000_000, 5_000_000]
 
-    # --- метрики -----------------------------------------------------
     def _step(self, server, key, override=None):
         lo, hi = server[key]
         v = self.cur[server["name"]][key]
@@ -63,7 +63,7 @@ class Simulator:
             target, noise = override, 1.0
         else:
             target, noise = (lo + hi) / 2, (hi - lo) / 12
-        # тянемся к цели + небольшой шум => плавные изменения, а не скачки
+
         v += (target - v) * 0.15 + self.rng.uniform(-noise, noise)
         if override is None:
             v = clamp(v, lo, hi)
@@ -72,7 +72,6 @@ class Simulator:
         self.cur[server["name"]][key] = v
         return round(v, 1)
 
-    # --- сеть --------------------------------------------------------
     def _network(self, server, cont_status):
         name = server["name"]
         conts = self.containers.get(name, [])
@@ -82,32 +81,51 @@ class Simulator:
         for c in conts:
             nodes.append({"id": c["name"], "label": c["name"], "type": "container"})
             running = cont_status[c["name"]] == "running"
-            links.append({"source": name, "target": c["name"], "type": "host",
-                          "load": self.rng.randint(5, 40) if running else 0})
+            links.append(
+                {
+                    "source": name,
+                    "target": c["name"],
+                    "type": "host",
+                    "load": self.rng.randint(5, 40) if running else 0,
+                }
+            )
             for n in c["networks"]:
                 if n not in nets:
                     nets.append(n)
-                links.append({"source": c["name"], "target": n, "type": "network",
-                              "load": self.rng.randint(5, 80) if running else 0})
+                links.append(
+                    {
+                        "source": c["name"],
+                        "target": n,
+                        "type": "network",
+                        "load": self.rng.randint(5, 80) if running else 0,
+                    }
+                )
         for n in nets:
             nodes.append({"id": n, "label": n, "type": "network"})
         names = {c["name"]: cont_status[c["name"]] for c in conts}
-        for l in self.traffic_links:
-            if l["source"] in names and l["target"] in names:
-                both_up = names[l["source"]] == "running" and names[l["target"]] == "running"
-                links.append({"source": l["source"], "target": l["target"],
-                              "type": "traffic",
-                              "load": self.rng.randint(*l["load"]) if both_up else 0})
+        for link in self.traffic_links:
+            if link["source"] in names and link["target"] in names:
+                both_up = (
+                    names[link["source"]] == "running"
+                    and names[link["target"]] == "running"
+                )
+                links.append(
+                    {
+                        "source": link["source"],
+                        "target": link["target"],
+                        "type": "traffic",
+                        "load": self.rng.randint(*link["load"]) if both_up else 0,
+                    }
+                )
         return {"nodes": nodes, "links": links}
 
-    # --- отчёты ------------------------------------------------------
     def build_reports(self, state, ts=None):
         """Список отчётов (по одному на сервер). Offline-серверы пропускаются."""
         reports = []
         for s in self.servers:
             name = s["name"]
             if state.get("servers", {}).get(name, "online") == "offline":
-                continue  # агент «молчит» — именно так падает настоящий
+                continue
             override = (state.get("cpu_override") or {}).get(name)
             cpu = self._step(s, "cpu", override)
             mem = self._step(s, "memory")
@@ -118,27 +136,38 @@ class Simulator:
                 c["name"]: (state.get("containers") or {}).get(c["name"], "running")
                 for c in self.containers.get(name, [])
             }
-            reports.append({
-                "schema_version": "1.0",
-                "source_id": self.source_id,
-                "timestamp": utc_iso(ts),
-                "host": {
-                    "name": name, "ip": s["ip"], "status": "online",
-                    "cpu_percent": cpu, "memory_percent": mem, "disk_percent": disk,
-                    "net_rx_bytes": self.net[name][0], "net_tx_bytes": self.net[name][1],
-                },
-                "containers": [
-                    {"id": c["id"], "name": c["name"], "image": c["image"],
-                     "status": cont_status[c["name"]], "ip": c["ip"],
-                     "networks": c["networks"]}
-                    for c in self.containers.get(name, [])
-                ],
-                "network": self._network(s, cont_status),
-            })
+            reports.append(
+                {
+                    "schema_version": "1.0",
+                    "source_id": self.source_id,
+                    "timestamp": utc_iso(ts),
+                    "host": {
+                        "name": name,
+                        "ip": s["ip"],
+                        "status": "online",
+                        "cpu_percent": cpu,
+                        "memory_percent": mem,
+                        "disk_percent": disk,
+                        "net_rx_bytes": self.net[name][0],
+                        "net_tx_bytes": self.net[name][1],
+                    },
+                    "containers": [
+                        {
+                            "id": c["id"],
+                            "name": c["name"],
+                            "image": c["image"],
+                            "status": cont_status[c["name"]],
+                            "ip": c["ip"],
+                            "networks": c["networks"],
+                        }
+                        for c in self.containers.get(name, [])
+                    ],
+                    "network": self._network(s, cont_status),
+                }
+            )
         return reports
 
 
-# ---------------------------------------------------------------------
 def read_state():
     """state.json перечитывается на каждом шаге — можно править руками."""
     try:
@@ -168,21 +197,31 @@ def send(url, reports, dry_run=False):
         return True
     try:
         r = requests.post(url, json=reports, timeout=5)
-        print(f"[{utc_iso()}] отправлено отчётов: {len(reports)} -> {r.status_code} {r.text[:120]}")
+        print(
+            f"[{utc_iso()}] отправлено отчётов: {len(reports)} -> {r.status_code} {r.text[:120]}"
+        )
         return r.ok
     except requests.RequestException as e:
-        # не падаем: backend может ещё стартовать
-        print(f"[{utc_iso()}] backend недоступен ({e.__class__.__name__}), повтор на след. шаге")
+        print(
+            f"[{utc_iso()}] backend недоступен ({e.__class__.__name__}), повтор на след. шаге"
+        )
         return False
 
 
 def main():
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--url", default=os.environ.get("INGEST_URL", "http://localhost:8000/api/v1/ingest"))
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    p.add_argument(
+        "--url",
+        default=os.environ.get("INGEST_URL", "http://localhost:8000/api/v1/ingest"),
+    )
     p.add_argument("--interval", type=float, default=5.0)
     p.add_argument("--scenario", help="файл сценария, например scenario_full_demo.json")
     p.add_argument("--once", action="store_true", help="один шаг и выход")
-    p.add_argument("--dry-run", action="store_true", help="не отправлять, печатать JSON")
+    p.add_argument(
+        "--dry-run", action="store_true", help="не отправлять, печатать JSON"
+    )
     p.add_argument("--seed", type=int, default=None)
     a = p.parse_args()
 

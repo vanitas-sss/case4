@@ -1,7 +1,6 @@
-from sqlalchemy.orm import Session
-
 from app.models.alert import Alert
 from app.repositories import events_repo
+from sqlalchemy.orm import Session
 
 
 def evaluate_host(db: Session, host, metric) -> None:
@@ -16,12 +15,15 @@ def evaluate_host(db: Session, host, metric) -> None:
             "severity": "warning",
             "message": (
                 f"Высокая загрузка CPU на {host.name}: {metric.cpu_percent:.1f}%"
-                if metric.cpu_percent is not None else ""
+                if metric.cpu_percent is not None
+                else ""
             ),
         },
     }
 
     for rule_name, condition in conditions.items():
+        if rule_name == "cpu_high" and metric.cpu_percent is None:
+            continue
         alert = (
             db.query(Alert)
             .filter(
@@ -66,21 +68,42 @@ def evaluate_container(db: Session, host, container) -> None:
     from app.core.time import utc_now_naive
 
     target = str(container.id)
-    alert = db.query(Alert).filter_by(
-        host_id=host.id, rule="container_stopped", target=target, status="active"
-    ).first()
+    alert = (
+        db.query(Alert)
+        .filter_by(
+            host_id=host.id, rule="container_stopped", target=target, status="active"
+        )
+        .first()
+    )
     if host.status != "online":
-        return  
+        return
     if container.status in {"stopped", "exited", "dead"} and alert is None:
         message = f"Контейнер {container.name} на {host.name} остановлен"
-        db.add(Alert(host_id=host.id, rule="container_stopped", target=target,
-                     severity="warning", status="active", message=message))
-        events_repo.create_event(db, host_id=host.id, container_id=container.id,
-                                 event_type="alert_opened", message=message)
+        db.add(
+            Alert(
+                host_id=host.id,
+                rule="container_stopped",
+                target=target,
+                severity="warning",
+                status="active",
+                message=message,
+            )
+        )
+        events_repo.create_event(
+            db,
+            host_id=host.id,
+            container_id=container.id,
+            event_type="alert_opened",
+            message=message,
+        )
         db.flush()
     elif container.status == "running" and alert is not None:
         alert.status = "resolved"
         alert.resolved_at = utc_now_naive()
-        events_repo.create_event(db, host_id=host.id, container_id=container.id,
-                                 event_type="alert_resolved",
-                                 message=f"Контейнер {container.name} снова работает")
+        events_repo.create_event(
+            db,
+            host_id=host.id,
+            container_id=container.id,
+            event_type="alert_resolved",
+            message=f"Контейнер {container.name} снова работает",
+        )

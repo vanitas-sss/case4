@@ -3,13 +3,14 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import requests
-
 from generator import Simulator
 
 p = argparse.ArgumentParser()
 p.add_argument("--minutes", type=int, default=60)
 p.add_argument("--step", type=int, default=5, help="шаг между отчётами, сек")
-p.add_argument("--url", default=os.environ.get("INGEST_URL", "http://localhost:8000/api/v1/ingest"))
+p.add_argument(
+    "--url", default=os.environ.get("INGEST_URL", "http://localhost:8000/api/v1/ingest")
+)
 p.add_argument("--dry-run", action="store_true")
 a = p.parse_args()
 

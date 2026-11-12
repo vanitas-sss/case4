@@ -1,10 +1,9 @@
 from pathlib import Path
 from typing import Generator
 
+from app.core.config import settings
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
-
-from app.core.config import settings
 
 
 def _database_url() -> str:
