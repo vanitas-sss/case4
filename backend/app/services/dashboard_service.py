@@ -1,8 +1,5 @@
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import case, func
-from sqlalchemy.orm import Session
-
 from app.core.config import settings
 from app.core.time import utc_now_naive
 from app.models.alert import Alert
@@ -12,6 +9,8 @@ from app.models.event import Event
 from app.models.host import Host
 from app.models.metric import Metric
 from app.models.network import NetworkLink, NetworkNode
+from sqlalchemy import case, func
+from sqlalchemy.orm import Session
 
 
 def iso_utc(value: datetime | None) -> str | None:
@@ -59,7 +58,9 @@ def serialize_host(db: Session, host: Host, now: datetime | None = None) -> dict
     metric = _latest_metric(db, host.id)
     containers = db.query(Container).filter(Container.host_id == host.id).all()
     active_alerts = (
-        db.query(Alert).filter(Alert.host_id == host.id, Alert.status == "active").count()
+        db.query(Alert)
+        .filter(Alert.host_id == host.id, Alert.status == "active")
+        .count()
     )
     return {
         "id": host.id,
@@ -69,7 +70,8 @@ def serialize_host(db: Session, host: Host, now: datetime | None = None) -> dict
         "last_seen": iso_utc(host.last_seen),
         "seconds_since_seen": (
             max(0, int(((now or utc_now_naive()) - host.last_seen).total_seconds()))
-            if host.last_seen is not None else None
+            if host.last_seen is not None
+            else None
         ),
         "cpu_percent": metric.cpu_percent if metric else None,
         "memory_percent": metric.memory_percent if metric else None,
@@ -95,7 +97,10 @@ def get_host_detail(db: Session, host_id: int) -> dict | None:
     result["source_id"] = host.source_id
     result["containers"] = [
         _container_dict(c, host.name)
-        for c in db.query(Container).filter(Container.host_id == host_id).order_by(Container.name).all()
+        for c in db.query(Container)
+        .filter(Container.host_id == host_id)
+        .order_by(Container.name)
+        .all()
     ]
     return result
 
@@ -115,7 +120,11 @@ def list_container_rows(
 
 
 def list_metric_rows(db: Session, host_id: int, period: str) -> list[dict]:
-    windows = {"1h": timedelta(hours=1), "6h": timedelta(hours=6), "24h": timedelta(hours=24)}
+    windows = {
+        "1h": timedelta(hours=1),
+        "6h": timedelta(hours=6),
+        "24h": timedelta(hours=24),
+    }
     since = utc_now_naive() - windows[period]
     rows = (
         db.query(Metric)
@@ -123,7 +132,7 @@ def list_metric_rows(db: Session, host_id: int, period: str) -> list[dict]:
         .order_by(Metric.timestamp.asc(), Metric.id.asc())
         .all()
     )
-    # Bound response size for dashboards and avoid expensive full-history responses.
+
     if len(rows) > 500:
         step = (len(rows) - 1) / 499
         rows = [rows[round(index * step)] for index in range(500)]
@@ -140,7 +149,9 @@ def list_metric_rows(db: Session, host_id: int, period: str) -> list[dict]:
     ]
 
 
-def list_topology(db: Session, host_id: int | None = None, node_type: str | None = None) -> dict:
+def list_topology(
+    db: Session, host_id: int | None = None, node_type: str | None = None
+) -> dict:
     node_query = db.query(NetworkNode)
     link_query = db.query(NetworkLink)
     if host_id is not None:
@@ -150,8 +161,6 @@ def list_topology(db: Session, host_id: int | None = None, node_type: str | None
     if node_type:
         nodes = [node for node in nodes if node.type == node_type]
 
-    # When several hosts are returned, namespace IDs to prevent collisions
-    # between identical external node IDs belonging to different hosts.
     def public_id(owner_id: int, external_id: str) -> str:
         return external_id if host_id is not None else f"{owner_id}:{external_id}"
 
@@ -170,12 +179,17 @@ def list_topology(db: Session, host_id: int | None = None, node_type: str | None
         if status != "online":
             return "unknown"
         if node.type == "container":
-            return container_statuses.get((node.host_id, node.external_id), node.status or "unknown")
+            return container_statuses.get(
+                (node.host_id, node.external_id), node.status or "unknown"
+            )
         return node.status or "unknown"
 
     allowed = {(node.host_id, node.external_id) for node in nodes}
     links = [
-        link for link in link_query.order_by(NetworkLink.host_id.asc(), NetworkLink.id.asc()).all()
+        link
+        for link in link_query.order_by(
+            NetworkLink.host_id.asc(), NetworkLink.id.asc()
+        ).all()
         if (link.host_id, link.source_id) in allowed
         and (link.host_id, link.target_id) in allowed
     ]
@@ -227,22 +241,22 @@ def list_availability(db: Session, period: str) -> list[dict]:
         .group_by(AvailabilityCheck.host_id)
         .all()
     )
-    stats = {
-        row[0]: (int(row[1]), int(row[2] or 0))
-        for row in aggregates
-    }
+    stats = {row[0]: (int(row[1]), int(row[2] or 0)) for row in aggregates}
 
     result = []
     for host in hosts:
         total, successful = stats.get(host.id, (0, 0))
-        result.append({
-            "host": host.name,
-            "status": host_status(host, now),
-            "last_seen": iso_utc(host.last_seen),
-            "uptime_percent": round(100 * successful / total, 2) if total else None,
-            "checks_total": total,
-        })
+        result.append(
+            {
+                "host": host.name,
+                "status": host_status(host, now),
+                "last_seen": iso_utc(host.last_seen),
+                "uptime_percent": round(100 * successful / total, 2) if total else None,
+                "checks_total": total,
+            }
+        )
     return result
+
 
 def list_event_rows(
     db: Session, limit: int, event_type: str | None = None, host_id: int | None = None
@@ -282,7 +296,9 @@ def list_alert_rows(db: Session, status: str | None = None) -> list[dict]:
             "started_at": iso_utc(alert.started_at),
             "resolved_at": iso_utc(alert.resolved_at),
         }
-        for alert, host_name in query.order_by(Alert.started_at.desc(), Alert.id.desc()).all()
+        for alert, host_name in query.order_by(
+            Alert.started_at.desc(), Alert.id.desc()
+        ).all()
     ]
 
 
@@ -296,6 +312,8 @@ def get_summary(db: Session) -> dict:
         "hosts_offline": sum(row["status"] == "offline" for row in hosts),
         "containers_total": len(containers),
         "containers_running": sum(row.status == "running" for row in containers),
-        "containers_stopped": sum(row.status in {"stopped", "exited"} for row in containers),
+        "containers_stopped": sum(
+            row.status in {"stopped", "exited"} for row in containers
+        ),
         "active_alerts": db.query(Alert).filter(Alert.status == "active").count(),
     }

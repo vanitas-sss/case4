@@ -1,13 +1,12 @@
 from datetime import datetime, timedelta
 
-from sqlalchemy.orm import Session
-
 from app.core.config import settings
 from app.core.time import to_utc_naive, utc_now_naive
 from app.models.availability import AvailabilityCheck
 from app.models.event import Event
 from app.models.ingest_report import IngestReport
 from app.models.metric import Metric
+from sqlalchemy.orm import Session
 
 
 def cleanup_old_records(

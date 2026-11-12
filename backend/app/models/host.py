@@ -25,7 +25,9 @@ class Host(Base):
         onupdate=utc_now_naive,
     )
 
-    metrics = relationship("Metric", back_populates="host", cascade="all, delete-orphan")
+    metrics = relationship(
+        "Metric", back_populates="host", cascade="all, delete-orphan"
+    )
     containers = relationship(
         "Container", back_populates="host", cascade="all, delete-orphan"
     )

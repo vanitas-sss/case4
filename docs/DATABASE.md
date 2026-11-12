@@ -30,9 +30,9 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 
+
 @router.get("/example")
-def example(db: Session = Depends(get_db)):
-    ...
+def example(db: Session = Depends(get_db)): ...
 ```
 
 ## Save an incoming report

@@ -2,17 +2,14 @@ import asyncio
 import logging
 from datetime import datetime
 
-from sqlalchemy.orm import Session
-
 from app.core.config import settings
 from app.core.time import to_utc_naive, utc_now_naive
 from app.db.session import SessionLocal
 from app.models.alert import Alert
 from app.models.host import Host
-from app.repositories import availability_repo
-
-from app.repositories import events_repo
+from app.repositories import availability_repo, events_repo
 from app.workers.cleanup import cleanup_old_records
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +40,10 @@ def check_stale_hosts(db: Session, now: datetime | None = None) -> int:
             )
             changed += 1
 
-        if host.status == "offline" and age >= settings.OFFLINE_AFTER + settings.ALERT_AFTER_OFFLINE:
+        if (
+            host.status == "offline"
+            and age >= settings.OFFLINE_AFTER + settings.ALERT_AFTER_OFFLINE
+        ):
             active = (
                 db.query(Alert)
                 .filter(
