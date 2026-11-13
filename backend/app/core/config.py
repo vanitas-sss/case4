@@ -7,11 +7,12 @@ class Settings(BaseSettings):
 
     DB_PATH: str = "data/metrics.db"
 
-    HEARTBEAT_INTERVAL: int = 60
-    WARNING_AFTER: int = 120
-    OFFLINE_AFTER: int = 150
+    HEARTBEAT_INTERVAL: int = Field(default=5, ge=1)
+    WARNING_AFTER: int = 10
+    OFFLINE_AFTER: int = 20
     ALERT_AFTER_OFFLINE: int = 10
-    CHECK_PERIOD: int = 30
+    CHECK_PERIOD: int = 5
+    MAX_FUTURE_SKEW_SECONDS: int = Field(default=60, ge=0)
 
     RETENTION_DAYS: int = Field(default=7, ge=1)
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

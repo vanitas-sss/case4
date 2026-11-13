@@ -40,15 +40,28 @@ def _latest_metric(db: Session, host_id: int) -> Metric | None:
     )
 
 
-def _container_dict(container: Container, host_name: str) -> dict:
+def container_status(
+    container: Container, host: Host, now: datetime | None = None
+) -> str:
+    current = now or utc_now_naive()
+    if host_status(host, current) != "online" or container.last_seen is None:
+        return "unknown"
+    if (current - container.last_seen).total_seconds() >= settings.WARNING_AFTER:
+        return "unknown"
+    return container.status
+
+
+def _container_dict(
+    container: Container, host: Host, now: datetime | None = None
+) -> dict:
     return {
         "id": container.id,
         "host_id": container.host_id,
-        "host_name": host_name,
+        "host_name": host.name,
         "docker_id": container.docker_id,
         "name": container.name,
         "image": container.image,
-        "status": container.status,
+        "status": container_status(container, host, now),
         "ip": container.ip,
         "networks": container.networks or [],
     }
@@ -77,7 +90,9 @@ def serialize_host(db: Session, host: Host, now: datetime | None = None) -> dict
         "memory_percent": metric.memory_percent if metric else None,
         "disk_percent": metric.disk_percent if metric else None,
         "containers_total": len(containers),
-        "containers_running": sum(c.status == "running" for c in containers),
+        "containers_running": sum(
+            container_status(c, host, now) == "running" for c in containers
+        ),
         "active_alerts": active_alerts,
     }
 
@@ -96,7 +111,7 @@ def get_host_detail(db: Session, host_id: int) -> dict | None:
     result = serialize_host(db, host)
     result["source_id"] = host.source_id
     result["containers"] = [
-        _container_dict(c, host.name)
+        _container_dict(c, host)
         for c in db.query(Container)
         .filter(Container.host_id == host_id)
         .order_by(Container.name)
@@ -108,15 +123,15 @@ def get_host_detail(db: Session, host_id: int) -> dict | None:
 def list_container_rows(
     db: Session, host_id: int | None = None, status: str | None = None
 ) -> list[dict]:
-    query = db.query(Container, Host.name).join(Host, Host.id == Container.host_id)
+    query = db.query(Container, Host).join(Host, Host.id == Container.host_id)
     if host_id is not None:
         query = query.filter(Container.host_id == host_id)
-    if status:
-        query = query.filter(Container.status == status)
-    return [
-        _container_dict(container, host_name)
-        for container, host_name in query.order_by(Container.name.asc()).all()
+    now = utc_now_naive()
+    rows = [
+        _container_dict(container, host, now)
+        for container, host in query.order_by(Container.name.asc()).all()
     ]
+    return [row for row in rows if row["status"] == status] if status else rows
 
 
 def list_metric_rows(db: Session, host_id: int, period: str) -> list[dict]:
@@ -167,9 +182,12 @@ def list_topology(
     owners = {h.id: h for h in db.query(Host).all()}
     containers = db.query(Container).all()
     container_statuses = {}
+    now = utc_now_naive()
     for c in containers:
-        container_statuses[(c.host_id, c.docker_id)] = c.status
-        container_statuses[(c.host_id, c.name)] = c.status
+        owner = owners.get(c.host_id)
+        status = container_status(c, owner, now) if owner else "unknown"
+        container_statuses[(c.host_id, c.docker_id)] = status
+        container_statuses[(c.host_id, c.name)] = status
 
     def node_status(node):
         owner = owners.get(node.host_id)
@@ -304,16 +322,16 @@ def list_alert_rows(db: Session, status: str | None = None) -> list[dict]:
 
 def get_summary(db: Session) -> dict:
     hosts = list_host_rows(db)
-    containers = db.query(Container).all()
+    containers = list_container_rows(db)
     return {
         "hosts_total": len(hosts),
         "hosts_online": sum(row["status"] == "online" for row in hosts),
         "hosts_warning": sum(row["status"] == "warning" for row in hosts),
         "hosts_offline": sum(row["status"] == "offline" for row in hosts),
         "containers_total": len(containers),
-        "containers_running": sum(row.status == "running" for row in containers),
+        "containers_running": sum(row["status"] == "running" for row in containers),
         "containers_stopped": sum(
-            row.status in {"stopped", "exited"} for row in containers
+            row["status"] in {"stopped", "exited", "dead"} for row in containers
         ),
         "active_alerts": db.query(Alert).filter(Alert.status == "active").count(),
     }

@@ -1,7 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.core.config import settings
+from app.core.time import to_utc_naive, utc_now_naive
 
 
 class InputModel(BaseModel):
@@ -15,8 +18,8 @@ class HostIn(InputModel):
     cpu_percent: float | None = Field(default=None, ge=0, le=100)
     memory_percent: float | None = Field(default=None, ge=0, le=100)
     disk_percent: float | None = Field(default=None, ge=0, le=100)
-    net_rx_bytes: int | None = Field(default=None, ge=0)
-    net_tx_bytes: int | None = Field(default=None, ge=0)
+    net_rx_bytes: int | None = Field(default=None, ge=0, le=2**63 - 1)
+    net_tx_bytes: int | None = Field(default=None, ge=0, le=2**63 - 1)
 
 
 class ContainerIn(InputModel):
@@ -77,6 +80,16 @@ class ReportIn(InputModel):
     host: HostIn
     containers: list[ContainerIn] = Field(default_factory=list)
     network: NetworkIn | None = None
+
+    @field_validator("timestamp")
+    @classmethod
+    def validate_timestamp(cls, value: datetime) -> datetime:
+        latest = utc_now_naive() + timedelta(seconds=settings.MAX_FUTURE_SKEW_SECONDS)
+        if to_utc_naive(value) > latest:
+            raise ValueError(
+                "timestamp слишком далеко в будущем: проверьте часы источника"
+            )
+        return value
 
     @model_validator(mode="after")
     def validate_container_ids(self):
