@@ -148,6 +148,13 @@ def process(db: Session, report: ReportIn) -> int:
                 )
 
         if previous_host is None:
+            events_repo.create_event(
+                db,
+                host_id=host.id,
+                event_type="source_registered",
+                message=f"Зарегистрирован сервер {host.name} от источника {source_id}",
+                timestamp=received_at,
+            )
             availability_repo.add_check(
                 db,
                 host_id=host.id,

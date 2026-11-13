@@ -128,7 +128,7 @@ def test_repeated_ingest_updates_host_and_container_but_keeps_metric_history(
     assert host.status == "online"
     assert container.status == "restarting"
     assert db_session.query(Metric).filter(Metric.host_id == host_id).count() == 2
-    assert db_session.query(Event).filter(Event.host_id == host_id).count() == 1
+    assert db_session.query(Event).filter(Event.host_id == host_id).count() == 2
     assert (
         db_session.query(AvailabilityCheck)
         .filter(AvailabilityCheck.host_id == host_id)
@@ -139,6 +139,7 @@ def test_repeated_ingest_updates_host_and_container_but_keeps_metric_history(
 
 def test_cleanup_removes_old_history_and_keeps_recent_records(db_session):
     report = _example_report()
+    report.timestamp = datetime.now(UTC)
     host_id = ingest_service.process(db_session, report)
 
     old_time = datetime.now(UTC) - timedelta(days=10)
@@ -181,7 +182,7 @@ def test_cleanup_removes_old_history_and_keeps_recent_records(db_session):
 
     assert result == {"metrics": 1, "events": 1, "availability_checks": 1}
     assert db_session.query(Metric).filter(Metric.host_id == host_id).count() == 1
-    assert db_session.query(Event).filter(Event.host_id == host_id).count() == 0
+    assert db_session.query(Event).filter(Event.host_id == host_id).count() == 1
     assert (
         db_session.query(IngestReport)
         .filter(IngestReport.source_id == "old-source")
