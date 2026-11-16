@@ -37,7 +37,7 @@ export default function SourcesPage() {
     }
     return (
         <>
-            <PageHeader title="Источники данных" subtitle="Агенты и импорт отчётов" />
+            <PageHeader title="Источники данных" subtitle="Подключение источников и импорт JSON" />
             <div className="stack">
                 <div className="card">
                     <h2>Известные источники</h2>
@@ -119,7 +119,7 @@ export default function SourcesPage() {
                     )}
                 </div>
                 <div className="card">
-                    <h2>Подключение агента</h2>
+                    <h2>Отправка данных</h2>
                     <p>
                         Агент отправляет массив JSON на <code>POST /api/v1/ingest</code>. В
                         Docker-сети адрес для генератора:{' '}
@@ -127,8 +127,8 @@ export default function SourcesPage() {
                         <code>http://localhost:8080/api/v1/ingest</code>.
                     </p>
                     <p>
-                        Генератор из профиля demo отправляет синтетические измерения. Для реального
-                        оборудования нужен внешний агент с согласованным контрактом.
+                        Генератор из профиля demo отправляет синтетические измерения. Реальный сборщик метрик
+                        разрабатывается отдельно и в этот проект не входит.
                     </p>
                     <a href="http://localhost:8000/docs" target="_blank" rel="noreferrer">
                         Swagger при локальном Docker-запуске

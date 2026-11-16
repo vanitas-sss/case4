@@ -167,9 +167,10 @@ export default function TopologyPage() {
         <>
             <PageHeader title="Топология" subtitle="Узлы и связи из отчётов источников" />
             <div className="card">
-                <label>
-                    Сервер
-                    <select
+                <div className="topology-controls">
+                    <label className="filter-field">
+                        Сервер
+                        <select
                         className="input"
                         aria-label="Сервер топологии"
                         value={host}
@@ -181,8 +182,9 @@ export default function TopologyPage() {
                                 {row.name}
                             </option>
                         ))}
-                    </select>
-                </label>
+                        </select>
+                    </label>
+                </div>
                 <Query
                     q={topology}
                     empty={(data) => !data?.nodes?.length}

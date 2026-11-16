@@ -11,7 +11,8 @@ const NAV = [
             ['/containers', 'Контейнеры', 'containers'],
             ['/metrics', 'Метрики', 'metrics'],
             ['/topology', 'Топология', 'servers'],
-            ['/events', 'События', 'clock', 'crit'],
+            ['/events', 'События', 'clock'],
+            ['/alerts', 'Оповещения', 'bell', 'crit'],
         ],
     ],
     [

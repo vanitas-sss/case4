@@ -13,7 +13,7 @@ export default function EventsPage() {
     return (
         <>
             <PageHeader title="Журнал событий" subtitle="История изменений и тревог" />
-            <div className="card filters row">
+            <div className="card filters events-filters">
                 <label>
                     Тип
                     <select
@@ -43,13 +43,16 @@ export default function EventsPage() {
                         ))}
                     </select>
                 </label>
-                <input
-                    className="input"
-                    aria-label="Поиск события"
-                    placeholder="Сервер или сообщение"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                />
+                <label>
+                    Поиск
+                    <input
+                        className="input"
+                        aria-label="Поиск события"
+                        placeholder="Сервер или сообщение"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
+                </label>
             </div>
             <div className="card">
                 <Query q={query}>
