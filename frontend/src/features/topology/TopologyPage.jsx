@@ -49,9 +49,10 @@ function NetworkGraph({ data }) {
                                     stroke={
                                         selected === link.source || selected === link.target
                                             ? '#E8B04A'
-                                            : '#666'
+                                            : '#888'
                                     }
-                                    strokeWidth="2"
+                                    strokeWidth={1.5 + (link.load ?? 0) / 25}
+                                    opacity={0.45 + (link.load ?? 0) / 200}
                                 >
                                     <title>
                                         {link.type}: {link.source} → {link.target}
