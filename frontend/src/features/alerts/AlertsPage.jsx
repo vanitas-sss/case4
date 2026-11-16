@@ -60,7 +60,9 @@ export default function AlertsPage() {
                                                             : 'Предупреждение'
                                                     }
                                                     tone={
-                                                        item.severity === 'critical' ? 'crit' : 'warn'
+                                                        item.severity === 'critical'
+                                                            ? 'crit'
+                                                            : 'warn'
                                                     }
                                                 />
                                             </td>
