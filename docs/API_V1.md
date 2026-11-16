@@ -1,96 +1,57 @@
-# API v1: ответы для frontend
+# API v1
 
-Base URL локально: `http://127.0.0.1:8000/api/v1`.
-
-Все ответы — JSON. Время возвращается в UTC в ISO 8601 с суффиксом `Z`. Проценты CPU/RAM/Disk и нагрузки связи — числа 0–100 или `null`, если значения ещё не поступали.
-
-## Источники данных
-
-Все GET-маршруты ниже читают SQLite через SQLAlchemy. Демонстрационные данные из `app/stubs.py` больше не используются этими маршрутами. Если база пуста, API возвращает пустые массивы и нулевые счётчики.
+Base URL: `http://localhost:8000/api/v1`, через Docker nginx — `http://localhost:8080/api/v1`.
+Все GET-маршруты читают реальную SQLite. Пустая база возвращает пустые массивы и нулевые счётчики. Время — ISO 8601 UTC (`Z` или `+00:00`), отсутствующие измерения — `null`.
 
 ## Маршруты
 
 | Метод и путь | Параметры | Ответ |
 |---|---|---|
-| `GET /health` | — | `{ "status": "ok" }` |
-| `GET /hosts` | `status` optional | Массив серверов |
-| `GET /hosts/{host_id}` | ID сервера | Сервер и его контейнеры; 404 если нет |
-| `GET /hosts/{host_id}/metrics` | `period=1h\|6h\|24h` | Массив метрик по времени, максимум 500 точек |
-| `GET /containers` | `host_id`, `status` optional | Массив контейнеров |
-| `GET /topology` | `host_id`, `type` optional | `nodes`, `links`, `generated_at` |
-| `GET /availability` | `period=1h\|6h\|24h\|7d` | Массив серверов с доступностью |
-| `GET /events` | `limit=1..500`, `type`, `host_id` optional | Последние события |
-| `GET /alerts` | `status=active\|resolved` optional | Список тревог |
-| `GET /summary` | — | Сводные счётчики |
+| GET /health | — | `{"status":"ok"}` |
+| POST /ingest | Массив отчётов JSON | accepted, rejected, received_at, errors |
+| POST /import | multipart поле file, UTF-8 JSON до 2 МиБ | Результат ingest |
+| GET /hosts | status: online, warning, offline, unknown | Массив серверов |
+| GET /hosts/{id} | Числовой id | Сервер с массивом containers; 404, если отсутствует |
+| GET /hosts/{id}/metrics | period: 1h, 6h, 24h, 7d | До 500 точек измерений |
+| GET /metrics/infra | period: 1h, 6h, 24h, 7d | До 500 усреднённых точек инфраструктуры |
+| GET /containers | host_id, status | Массив контейнеров |
+| GET /topology | host_id, type | nodes, links, generated_at |
+| GET /availability | period: 1h, 6h, 24h, 7d | Доля успешных проверок хостов |
+| GET /events | limit: 1–500, type, host_id, period: 1h/6h/24h/7d | Последние события после фильтрации |
+| GET /alerts | status: active, resolved | Тревоги |
+| GET /summary | — | Сводные счётчики |
+| GET /sources | — | Источники по source_id известных хостов |
 
+Параметры фильтрации необязательны. Период метрик по умолчанию 1h, доступности — 24h; события без period не ограничены периодом, но ограничены limit (по умолчанию 50).
 
+## Поля ответов
 
-Для `GET /topology?host_id=ID` поле `id` узла остаётся исходным внешним ID из отчёта агента. Для общей топологии без `host_id` ID формируется как `host_id:external_id`, чтобы одинаковые ID узлов разных серверов не конфликтовали. У узла дополнительно есть `external_id` и `host_id`; у связи — `host_id`.
+Сервер: `id`, `name`, `source_id`, `ip`, `status`, `last_seen`, `metric_timestamp`, `seconds_since_seen`, `cpu_percent`, `memory_percent`, `disk_percent`, `containers_total`, `containers_running`, `active_alerts`.
 
-## Объект сервера
+`last_seen` — время получения нового отчёта, `metric_timestamp` — время измерения в отчёте. Последние значения могут быть историческими; их время обязательно учитывать. Подробный маршрут также возвращает `containers`.
 
-```json
-{
-  "id": 1,
-  "name": "server-01",
-  "ip": "192.168.1.10",
-  "status": "online",
-  "last_seen": "2026-11-11T10:00:00Z",
-  "seconds_since_seen": 2,
-  "cpu_percent": 42.5,
-  "memory_percent": 61.2,
-  "disk_percent": 48.1,
-  "containers_total": 2,
-  "containers_running": 2,
-  "active_alerts": 0
-}
-```
+Контейнер: `id`, `host_id`, `host_name`, `docker_id`, `name`, `image`, `status`, `ip`, `networks`, `last_seen`. При устаревшем отчёте или недоступном хосте вычисляемый статус — unknown. CPU/RAM контейнера и число перезапусков не входят в контракт.
 
-Состояние пересчитывается по возрасту последнего отчёта: меньше `WARNING_AFTER` — исходный статус; начиная с `WARNING_AFTER` — `warning`; начиная с `OFFLINE_AFTER` — `offline`. Пороговые значения находятся в `backend/app/core/config.py`.
+Метрика хоста: `timestamp`, `cpu_percent`, `memory_percent`, `disk_percent`, `net_rx_bytes`, `net_tx_bytes`. Сетевые поля — накопительные счётчики байтов. При большом количестве измерений выбираются равномерные по индексам точки, поэтому краткие пики могут быть пропущены.
 
-## Объект метрики
+Метрика инфраструктуры: `timestamp`, `cpu_percent`, `memory_percent`, `disk_percent`, `hosts_count`. timestamp обозначает начало интервала. Сначала вычисляется среднее внутри каждого хоста за интервал, затем среднее между хостами. null не превращается в ноль; пропущенные интервалы не заполняются выдуманными измерениями. Источники с частой отправкой не получают дополнительный вес. hosts_count — число хостов с отчётами в интервале, включая отчёты без отдельных метрик.
 
-```json
-{
-  "timestamp": "2026-11-11T10:00:00Z",
-  "cpu_percent": 42.5,
-  "memory_percent": 61.2,
-  "disk_percent": 48.1,
-  "net_rx_bytes": 1000,
-  "net_tx_bytes": 2000
-}
-```
+Событие: `id`, `timestamp`, `type`, `host`, `host_id`, `container`, `message`. Полей new/in_progress/closed нет: события — журнал, а состояния active/resolved относятся к тревогам.
 
-## Объект контейнера
+Тревога: `id`, `rule`, `target`, `host`, `severity`, `status`, `message`, `started_at`, `resolved_at`. CPU >= 90% открывает cpu_high, подтверждённая остановка контейнера на доступном хосте — container_stopped. Фоновый мониторинг открывает host_offline после таймаута. При восстановлении тревога закрывается. Длительность высокой CPU-нагрузки отдельно не учитывается.
 
-Поля: `id` (внутренний ID БД), `host_id`, `host_name`, `docker_id` (идентификатор источника), `name`, `image`, `status`, `ip`, `networks`.
+Доступность: `host_id`, `host`, `status`, `last_seen`, `uptime_percent`, `checks_total`. Если проверок нет, процент null. Это доля успешных наблюдений, не аптайм ОС и не точный SLA.
 
-## Тревоги
+Источник: `source_id`, `hosts_total`, `hosts_online`, `last_seen`. Это группировка известных хостов, а не список настроенных внешних интеграций.
 
-Базовые правила создаются при обработке входящего отчёта:
+Сводка: `hosts_total`, `hosts_online`, `hosts_warning`, `hosts_offline`, `containers_total`, `containers_running`, `containers_stopped`, `active_alerts`.
 
-- `cpu_high`: CPU >= 90%, severity `warning`.
-- `host_offline`: источник передал статус `offline`, severity `critical`.
+Топология: узлы содержат id, external_id, host_id, label, type, status, ip; связи — source, target, type, load, host_id. В общей топологии id равен `host_id:external_id`. При фильтре host_id возвращается исходный external_id. Не смешивайте идентификаторы из этих двух ответов. Если label отсутствует, используется external_id.
 
-Тревога открывается один раз, пока условие активно. При следующем отчёте, в котором условие перестало выполняться, она закрывается и создаётся событие. Это базовый учебный алертинг; автоматическое создание тревоги только из-за пропущенного heartbeat пока не реализовано.
+## Импорт и ошибки
 
-## Доступность
+HTTP 200 на ingest/import не гарантирует принятие всех элементов: проверяйте rejected и errors. В errors указан индекс элемента массива с нуля и список loc/msg. Неверный внешний формат — 422, неразбираемый файл — 400, файл больше лимита — 413. Повтор и старый отчёт могут считаться принятыми без создания новой метрики и без продления heartbeat.
 
-`uptime_percent` — доля успешных проверок (`is_online=true`) среди проверок за выбранный период, а не точный time-weighted uptime. Если проверок нет, возвращается `null`.
+Точный входной контракт: `backend/app/schemas/ingest.py`; пример: `backend/examples/ingest.example.json`. Swagger: `/docs` backend.
 
-## Подключение frontend
-
-Создайте общий модуль, например `frontend/src/api/client.js`, с base URL `http://127.0.0.1:8000/api/v1`. Компоненты React должны получать данные через этот модуль, а не обращаться к SQLite и не импортировать Python-файлы. Для изменения API сначала обновите этот документ и согласуйте JSON-поля с frontend-командой.
-
-
-## Дополнение: импорт и доступность (11.11.2026)
-
-`POST /api/v1/import`: multipart/form-data, поле `file`, JSON-массив того же контракта, что `/ingest`, максимум 2 МиБ, UTF-8.
-Ответ совпадает с `/ingest`; 400 — некорректный JSON, 413 — слишком большой файл, 422 — неверная структура.
-Автоконвертация произвольного JSON кейса 1 не включена до согласования реального образца.
-
-`last_seen` — время получения нового снимка backend. `timestamp` метрик остаётся временем источника.
-Повторные и запоздавшие снимки не обновляют last_seen. Uptime — доля online среди сохранённых проверок, а не точный процент времени.
-Heartbeat тревога появляется через OFFLINE_AFTER + ALERT_AFTER_OFFLINE с точностью CHECK_PERIOD.
-В топологии статус сервера учитывает heartbeat; контейнер при недоступном сервере имеет unknown.
-Для `container_stopped` поле `target` содержит строковый ID контейнера базы; имя находится в message. Тревога закрывается при running.
+Маршрутов управления серверами, контейнерами, настройками интеграций или авторизацией нет. `/services` не используется: доступность показана по хостам через `/availability`.

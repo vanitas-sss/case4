@@ -9,7 +9,7 @@ from app.models.event import Event
 from app.models.host import Host
 from app.models.metric import Metric
 from app.models.network import NetworkLink, NetworkNode
-from sqlalchemy import case, func
+from sqlalchemy import Integer, case, cast, func
 from sqlalchemy.orm import Session
 
 
@@ -64,6 +64,7 @@ def _container_dict(
         "status": container_status(container, host, now),
         "ip": container.ip,
         "networks": container.networks or [],
+        "last_seen": iso_utc(container.last_seen),
     }
 
 
@@ -78,9 +79,11 @@ def serialize_host(db: Session, host: Host, now: datetime | None = None) -> dict
     return {
         "id": host.id,
         "name": host.name,
+        "source_id": host.source_id,
         "ip": host.ip,
         "status": host_status(host, now),
         "last_seen": iso_utc(host.last_seen),
+        "metric_timestamp": iso_utc(metric.timestamp) if metric else None,
         "seconds_since_seen": (
             max(0, int(((now or utc_now_naive()) - host.last_seen).total_seconds()))
             if host.last_seen is not None
@@ -139,6 +142,7 @@ def list_metric_rows(db: Session, host_id: int, period: str) -> list[dict]:
         "1h": timedelta(hours=1),
         "6h": timedelta(hours=6),
         "24h": timedelta(hours=24),
+        "7d": timedelta(days=7),
     }
     since = utc_now_naive() - windows[period]
     rows = (
@@ -217,7 +221,7 @@ def list_topology(
                 "id": public_id(node.host_id, node.external_id),
                 "external_id": node.external_id,
                 "host_id": node.host_id,
-                "label": node.label,
+                "label": node.label or node.external_id,
                 "type": node.type,
                 "status": node_status(node),
                 "ip": node.ip,
@@ -266,6 +270,7 @@ def list_availability(db: Session, period: str) -> list[dict]:
         total, successful = stats.get(host.id, (0, 0))
         result.append(
             {
+                "host_id": host.id,
                 "host": host.name,
                 "status": host_status(host, now),
                 "last_seen": iso_utc(host.last_seen),
@@ -277,9 +282,18 @@ def list_availability(db: Session, period: str) -> list[dict]:
 
 
 def list_event_rows(
-    db: Session, limit: int, event_type: str | None = None, host_id: int | None = None
+    db: Session,
+    limit: int,
+    event_type: str | None = None,
+    host_id: int | None = None,
+    period: str | None = None,
 ) -> list[dict]:
     query = db.query(Event, Host.name).join(Host, Host.id == Event.host_id)
+    if period:
+        query = query.filter(
+            Event.timestamp
+            >= utc_now_naive() - timedelta(seconds=PERIOD_SECONDS[period])
+        )
     if event_type:
         query = query.filter(Event.type == event_type)
     if host_id is not None:
@@ -291,6 +305,7 @@ def list_event_rows(
             "timestamp": iso_utc(event.timestamp),
             "type": event.type,
             "host": host_name,
+            "host_id": event.host_id,
             "container": event.container.name if event.container else None,
             "message": event.message,
         }
@@ -335,3 +350,70 @@ def get_summary(db: Session) -> dict:
         ),
         "active_alerts": db.query(Alert).filter(Alert.status == "active").count(),
     }
+
+
+PERIOD_SECONDS = {"1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800}
+
+
+def list_infrastructure_metrics(db: Session, period: str) -> list[dict]:
+    seconds = PERIOD_SECONDS[period]
+    since = utc_now_naive() - timedelta(seconds=seconds)
+    width = max(1, (seconds + 498) // 499)
+    bucket = cast(cast(func.strftime("%s", Metric.timestamp), Integer) / width, Integer)
+    per_host = (
+        db.query(
+            bucket.label("bucket"),
+            Metric.host_id,
+            func.avg(Metric.cpu_percent).label("cpu"),
+            func.avg(Metric.memory_percent).label("memory"),
+            func.avg(Metric.disk_percent).label("disk"),
+        )
+        .filter(Metric.timestamp >= since, Metric.timestamp <= utc_now_naive())
+        .group_by(bucket, Metric.host_id)
+        .subquery()
+    )
+    rows = (
+        db.query(
+            per_host.c.bucket,
+            func.avg(per_host.c.cpu),
+            func.avg(per_host.c.memory),
+            func.avg(per_host.c.disk),
+            func.count(per_host.c.host_id),
+        )
+        .group_by(per_host.c.bucket)
+        .order_by(per_host.c.bucket)
+        .all()
+    )
+    return [
+        {
+            "timestamp": datetime.fromtimestamp(
+                row[0] * width, timezone.utc
+            ).isoformat(),
+            "cpu_percent": row[1],
+            "memory_percent": row[2],
+            "disk_percent": row[3],
+            "hosts_count": row[4],
+        }
+        for row in rows
+    ]
+
+
+def list_sources(db: Session) -> list[dict]:
+    groups = {}
+    for host in list_host_rows(db):
+        source = groups.setdefault(
+            host["source_id"],
+            {
+                "source_id": host["source_id"],
+                "hosts_total": 0,
+                "hosts_online": 0,
+                "last_seen": None,
+            },
+        )
+        source["hosts_total"] += 1
+        source["hosts_online"] += host["status"] == "online"
+        if host["last_seen"] and (
+            source["last_seen"] is None or host["last_seen"] > source["last_seen"]
+        ):
+            source["last_seen"] = host["last_seen"]
+    return sorted(groups.values(), key=lambda row: row["source_id"])
