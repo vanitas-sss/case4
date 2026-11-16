@@ -812,3 +812,17 @@ summary {
 .container-card.unknown {
     opacity: .7;
 }
+
+.topology-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    color: var(--text2);
+    font-size: 12px;
+    padding: 0 0 12px;
+}
+.topology-legend > span {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
