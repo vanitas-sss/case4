@@ -810,7 +810,7 @@ summary {
     max-width: 70%;
 }
 .container-card.unknown {
-    opacity: .7;
+    opacity: 0.7;
 }
 
 .topology-legend {

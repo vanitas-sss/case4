@@ -121,7 +121,9 @@ export default function ContainersPage() {
                                 {shown.length ? (
                                     [...groups].map(([name, items]) => (
                                         <section className="container-group" key={name}>
-                                            <h2>{name} · {items.length}</h2>
+                                            <h2>
+                                                {name} · {items.length}
+                                            </h2>
                                             <div className="container-grid">
                                                 {items.map((item) => (
                                                     <ContainerCard

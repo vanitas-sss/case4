@@ -28,7 +28,9 @@ export default function HostCard({ host, onOpen }) {
                 ))}
             </div>
             <div className="host-card-footer">
-                <span>Контейнеры: {host.containers_running} / {host.containers_total}</span>
+                <span>
+                    Контейнеры: {host.containers_running} / {host.containers_total}
+                </span>
                 <span>{agoIso(host.last_seen)}</span>
             </div>
         </article>
