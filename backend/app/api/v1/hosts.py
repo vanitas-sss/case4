@@ -26,7 +26,7 @@ def get_host(host_id: int, db: Session = Depends(get_db)):
 @router.get("/hosts/{host_id}/metrics")
 def host_metrics(
     host_id: int,
-    period: str = Query("1h", pattern="^(1h|6h|24h)$"),
+    period: str = Query("1h", pattern="^(1h|6h|24h|7d)$"),
     db: Session = Depends(get_db),
 ):
     if dashboard_service.get_host_detail(db, host_id) is None:

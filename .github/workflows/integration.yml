@@ -1,0 +1,74 @@
+name: Frontend and Docker integration
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, 'feat/frontend-integration']
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+      - name: Check frontend
+        run: |
+          npm run lint --prefix frontend
+          npm run format:check --prefix frontend
+          npm test --prefix frontend
+          npm run build --prefix frontend
+      - name: Validate and build Compose services
+        run: |
+          docker compose --profile demo config --quiet
+          docker compose --profile demo build
+          docker compose up -d --wait
+      - name: Install browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Browser integration tests
+        working-directory: frontend
+        run: npm run test:e2e
+      - name: Verify demo generator and persistence
+        run: |
+          docker compose --profile demo run --rm generator python generator.py --once
+          python - <<'PY'
+          import json, urllib.request
+          rows = json.load(urllib.request.urlopen('http://localhost:8080/api/v1/hosts'))
+          assert any(row['name'] == 'server-01' for row in rows), rows
+          PY
+          docker compose restart backend
+          docker compose up -d --wait
+          python - <<'PY'
+          import json, urllib.request, time
+          for attempt in range(30):
+              try:
+                  rows = json.load(urllib.request.urlopen('http://localhost:8080/api/v1/hosts'))
+                  assert any(row['name'] == 'server-01' for row in rows), rows
+                  break
+              except Exception:
+                  if attempt == 29:
+                      raise
+                  time.sleep(1)
+          PY
+      - name: Container logs
+        if: always()
+        run: docker compose logs --no-color
+      - name: Save browser report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+      - name: Stop containers
+        if: always()
+        run: docker compose --profile demo down -v
