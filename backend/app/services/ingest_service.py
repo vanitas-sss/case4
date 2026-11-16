@@ -33,10 +33,28 @@ def process(db: Session, report: ReportIn) -> int:
             if previous_host is not None
             else None
         )
-        if (
-            latest_metric is not None
-            and normalized_timestamp <= latest_metric.timestamp
-        ):
+        if latest_metric is not None and normalized_timestamp <= latest_metric.timestamp:
+            if normalized_timestamp == latest_metric.timestamp:
+                return previous_host.id
+            db.add(
+                IngestReport(
+                    source_id=source_id,
+                    host_name=host_data["name"],
+                    timestamp=normalized_timestamp,
+                )
+            )
+            db.flush()
+            metrics_repo.add_metric(
+                db=db,
+                host_id=previous_host.id,
+                timestamp=timestamp,
+                cpu_percent=host_data.get("cpu_percent"),
+                memory_percent=host_data.get("memory_percent"),
+                disk_percent=host_data.get("disk_percent"),
+                net_rx_bytes=host_data.get("net_rx_bytes"),
+                net_tx_bytes=host_data.get("net_tx_bytes"),
+            )
+            db.commit()
             return previous_host.id
 
         db.add(

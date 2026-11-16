@@ -422,7 +422,8 @@ def test_out_of_order_report_does_not_overwrite_newer_state(db_session):
     assert host.status == "online"
     assert host.last_seen > newer.timestamp.replace(tzinfo=None)
     assert max(m.timestamp for m in metrics) == newer.timestamp.replace(tzinfo=None)
-    assert len(metrics) == 2
+    assert len(metrics) == 3
+    assert min(metric.timestamp for metric in metrics) == report.timestamp.replace(tzinfo=None)
     assert max(metric.timestamp for metric in metrics) == newer.timestamp.replace(
         tzinfo=None
     )

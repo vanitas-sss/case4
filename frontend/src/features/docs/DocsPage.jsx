@@ -53,7 +53,7 @@ export default function DocsPage() {
                     </p>
                     <p>
                         Для автоматической отправки используется POST /api/v1/ingest. Контракт и
-                        команды запуска приведены в docs/DOCKER_GUIDE_RU.md репозитория.
+                        команды запуска приведены в docs/DEPLOY.md репозитория.
                     </p>
                 </section>
                 <section className="card">
