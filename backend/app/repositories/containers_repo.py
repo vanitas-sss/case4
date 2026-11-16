@@ -41,6 +41,13 @@ def upsert_container(
     if image is not None:
         container.image = image
     if status is not None:
+        stopped = {"stopped", "exited", "dead"}
+        if status in stopped and (
+            container.status not in stopped or container.stopped_since is None
+        ):
+            container.stopped_since = to_utc_naive(last_seen or utc_now_naive())
+        elif status not in stopped:
+            container.stopped_since = None
         container.status = status
     if ip is not None:
         container.ip = ip

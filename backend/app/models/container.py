@@ -30,6 +30,7 @@ class Container(Base):
     ip = Column(String(64), nullable=True)
     networks = Column(JSON, nullable=False, default=list)
     last_seen = Column(DateTime(timezone=True), nullable=True, index=True)
+    stopped_since = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now_naive)
 
     host = relationship("Host", back_populates="containers")

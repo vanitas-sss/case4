@@ -96,7 +96,7 @@ def process(db: Session, report: ReportIn) -> int:
             events_repo.create_event(
                 db,
                 host_id=host.id,
-                event_type="host_status_changed",
+                event_type="host_online" if host.status == "online" else "host_offline",
                 message=(
                     f"Статус сервера изменился: {previous_host_status} → {host.status}"
                 ),
@@ -138,7 +138,13 @@ def process(db: Session, report: ReportIn) -> int:
                     db,
                     host_id=host.id,
                     container_id=container.id,
-                    event_type="container_status_changed",
+                    event_type=(
+                        "container_started"
+                        if container.status == "running"
+                        else "container_stopped"
+                        if container.status in {"stopped", "exited", "dead"}
+                        else "container_status_changed"
+                    ),
                     message=(
                         f"Статус контейнера {container.name} изменился: "
                         f"{previous_container_status} → {container.status}"
@@ -150,6 +156,7 @@ def process(db: Session, report: ReportIn) -> int:
         for container in host.containers:
             if container.docker_id not in reported_containers and container.status != "unknown":
                 container.status = "unknown"
+                container.stopped_since = None
                 evaluate_container(db, host, container)
 
         if previous_host is None:
