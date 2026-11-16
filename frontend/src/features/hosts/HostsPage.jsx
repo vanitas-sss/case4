@@ -7,12 +7,14 @@ import StatusBadge from '../../components/StatusBadge'
 import MetricBar from '../../components/MetricBar'
 import { hostView, matchesHost } from '../../utils/format'
 import HostPanel from './HostPanel'
+import HostCard from './HostCard'
 
 export default function HostsPage() {
     const hosts = useHosts()
     const [search, setSearch] = useState(''),
         [status, setStatus] = useState(''),
-        [selected, setSelected] = useState(null)
+        [selected, setSelected] = useState(null),
+        [view, setView] = useState('cards')
     return (
         <>
             <PageHeader title="Серверы" subtitle="Узлы инфраструктуры" />
@@ -48,7 +50,34 @@ export default function HostsPage() {
                                 (!status || host.status === status) && matchesHost(host, search),
                         )
                         return shown.length ? (
-                            <div className="table-scroll">
+                            <>
+                                <div className="tabs" role="group" aria-label="Режим отображения серверов">
+                                    {[
+                                        ['cards', 'Карточки'],
+                                        ['table', 'Таблица'],
+                                    ].map(([value, label]) => (
+                                        <button
+                                            key={value}
+                                            className={`tab ${view === value ? 'on' : ''}`}
+                                            aria-pressed={view === value}
+                                            onClick={() => setView(value)}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                                {view === 'cards' ? (
+                                    <div className="hosts-grid">
+                                        {shown.map((host) => (
+                                            <HostCard
+                                                key={host.id}
+                                                host={host}
+                                                onOpen={() => setSelected(host.id)}
+                                            />
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="table-scroll">
                                 <table className="tbl nd">
                                     <thead>
                                         <tr>
@@ -94,7 +123,9 @@ export default function HostsPage() {
                                         ))}
                                     </tbody>
                                 </table>
-                            </div>
+                                    </div>
+                                )}
+                            </>
                         ) : (
                             <p className="nodata">Серверов по этому запросу нет</p>
                         )
