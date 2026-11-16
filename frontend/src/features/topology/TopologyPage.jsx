@@ -171,17 +171,17 @@ export default function TopologyPage() {
                     <label className="filter-field">
                         Сервер
                         <select
-                        className="input"
-                        aria-label="Сервер топологии"
-                        value={host}
-                        onChange={(e) => setHost(e.target.value)}
-                    >
-                        <option value="">Все серверы</option>
-                        {(hosts.data ?? []).map((row) => (
-                            <option key={row.id} value={row.id}>
-                                {row.name}
-                            </option>
-                        ))}
+                            className="input"
+                            aria-label="Сервер топологии"
+                            value={host}
+                            onChange={(e) => setHost(e.target.value)}
+                        >
+                            <option value="">Все серверы</option>
+                            {(hosts.data ?? []).map((row) => (
+                                <option key={row.id} value={row.id}>
+                                    {row.name}
+                                </option>
+                            ))}
                         </select>
                     </label>
                 </div>

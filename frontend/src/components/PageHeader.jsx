@@ -26,7 +26,11 @@ function Notifications() {
                     <Query q={query} emptyTitle="Активных тревог нет">
                         {(alerts) => (
                             <>
-                                <Link className="link-btn" to="/alerts" onClick={() => setOpen(false)}>
+                                <Link
+                                    className="link-btn"
+                                    to="/alerts"
+                                    onClick={() => setOpen(false)}
+                                >
                                     Все оповещения
                                 </Link>
                                 {' · '}

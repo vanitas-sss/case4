@@ -30,7 +30,11 @@ export default function AlertsPage() {
                 </div>
                 <Query
                     q={query}
-                    emptyTitle={status === 'active' ? 'Активных оповещений нет' : 'Истории оповещений пока нет'}
+                    emptyTitle={
+                        status === 'active'
+                            ? 'Активных оповещений нет'
+                            : 'Истории оповещений пока нет'
+                    }
                 >
                     {(rows) => (
                         <div className="table-scroll">
@@ -50,11 +54,23 @@ export default function AlertsPage() {
                                             <td>{item.message}</td>
                                             <td>
                                                 <StatusBadge
-                                                    label={item.severity === 'critical' ? 'Критично' : 'Предупреждение'}
-                                                    tone={item.severity === 'critical' ? 'crit' : 'warn'}
+                                                    label={
+                                                        item.severity === 'critical'
+                                                            ? 'Критично'
+                                                            : 'Предупреждение'
+                                                    }
+                                                    tone={
+                                                        item.severity === 'critical' ? 'crit' : 'warn'
+                                                    }
                                                 />
                                             </td>
-                                            <td>{agoIso(status === 'active' ? item.started_at : item.resolved_at)}</td>
+                                            <td>
+                                                {agoIso(
+                                                    status === 'active'
+                                                        ? item.started_at
+                                                        : item.resolved_at,
+                                                )}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -63,7 +79,8 @@ export default function AlertsPage() {
                     )}
                 </Query>
                 <p className="sub">
-                    Оповещения создаются и закрываются автоматически. Доставка в мессенджеры не используется.
+                    Оповещения создаются и закрываются автоматически. Доставка в мессенджеры не
+                    используется.
                 </p>
             </div>
         </>
