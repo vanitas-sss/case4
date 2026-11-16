@@ -25,5 +25,4 @@ api_router.include_router(summary.router)
 
 @api_router.get("/health", tags=["service"])
 def health():
-    """Проверка, что сервис жив."""
     return {"status": "ok"}
