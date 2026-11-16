@@ -82,51 +82,51 @@ export default function HostsPage() {
                                     </div>
                                 ) : (
                                     <div className="table-scroll">
-                                    <table className="tbl nd">
-                                        <thead>
-                                            <tr>
-                                                <th>Узел</th>
-                                                <th>IP</th>
-                                                <th>CPU</th>
-                                                <th>RAM</th>
-                                                <th>Диск</th>
-                                                <th>Статус</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {shown.map((host) => (
-                                                <tr key={host.id}>
-                                                    <td>
-                                                        <button
-                                                            className="link-btn"
-                                                            onClick={() => setSelected(host.id)}
-                                                        >
-                                                            {host.name}
-                                                        </button>
-                                                    </td>
-                                                    <td>{host.ip ?? '—'}</td>
-                                                    {[
-                                                        'cpu_percent',
-                                                        'memory_percent',
-                                                        'disk_percent',
-                                                    ].map((field) => (
-                                                        <td key={field}>
-                                                            <MetricBar
-                                                                value={
-                                                                    host.status === 'online'
-                                                                        ? host[field]
-                                                                        : null
-                                                                }
-                                                            />
-                                                        </td>
-                                                    ))}
-                                                    <td>
-                                                        <StatusBadge {...hostView(host)} />
-                                                    </td>
+                                        <table className="tbl nd">
+                                            <thead>
+                                                <tr>
+                                                    <th>Узел</th>
+                                                    <th>IP</th>
+                                                    <th>CPU</th>
+                                                    <th>RAM</th>
+                                                    <th>Диск</th>
+                                                    <th>Статус</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody>
+                                                {shown.map((host) => (
+                                                    <tr key={host.id}>
+                                                        <td>
+                                                            <button
+                                                                className="link-btn"
+                                                                onClick={() => setSelected(host.id)}
+                                                            >
+                                                                {host.name}
+                                                            </button>
+                                                        </td>
+                                                        <td>{host.ip ?? '—'}</td>
+                                                        {[
+                                                            'cpu_percent',
+                                                            'memory_percent',
+                                                            'disk_percent',
+                                                        ].map((field) => (
+                                                            <td key={field}>
+                                                                <MetricBar
+                                                                    value={
+                                                                        host.status === 'online'
+                                                                            ? host[field]
+                                                                            : null
+                                                                    }
+                                                                />
+                                                            </td>
+                                                        ))}
+                                                        <td>
+                                                            <StatusBadge {...hostView(host)} />
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
                                     </div>
                                 )}
                             </>
