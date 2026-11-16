@@ -11,8 +11,6 @@ docker compose up --build -d --wait
 ```
 
 - Сайт: http://localhost:8080
-- API: http://localhost:8000/docs
-- Проверка: http://localhost:8000/api/v1/health
 
 Демонстрационные данные запускаются отдельно:
 
