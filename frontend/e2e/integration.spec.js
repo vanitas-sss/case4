@@ -84,6 +84,7 @@ test('real reports populate every page and host search handles missing fields', 
             /NaN|undefined|Не удалось отобразить страницу/,
         )
         if (path === '/topology') await expect(page.getByLabel('Граф топологии')).toBeVisible()
+        await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
         await page.screenshot({
             path: `test-results/page-${path.replaceAll('/', '') || 'overview'}.png`,
             fullPage: true,

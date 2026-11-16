@@ -6,7 +6,9 @@ export async function request(path, params = {}, options = {}) {
     try {
         response = await fetch(`/api/v1${path}${query ? `?${query}` : ''}`, {
             ...options,
-            signal: options.signal ?? AbortSignal.timeout(15000),
+            signal: options.signal
+                ? AbortSignal.any([options.signal, AbortSignal.timeout(15000)])
+                : AbortSignal.timeout(15000),
         })
     } catch {
         throw new Error('Backend недоступен. Проверьте соединение и повторите запрос.')

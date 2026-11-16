@@ -18,6 +18,7 @@ export default function EventsPage() {
                     Тип
                     <select
                         className="input"
+                        aria-label="Тип события"
                         value={type}
                         onChange={(e) => setType(e.target.value)}
                     >
@@ -33,6 +34,7 @@ export default function EventsPage() {
                     Период
                     <select
                         className="input"
+                        aria-label="Период"
                         value={period}
                         onChange={(e) => setPeriod(e.target.value)}
                     >

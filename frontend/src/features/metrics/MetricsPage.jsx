@@ -31,6 +31,7 @@ export default function MetricsPage() {
                         Источник
                         <select
                             className="input"
+                            aria-label="Источник"
                             value={host}
                             onChange={(e) => setHost(e.target.value)}
                         >
@@ -46,6 +47,7 @@ export default function MetricsPage() {
                         Метрика
                         <select
                             className="input"
+                            aria-label="Метрика"
                             value={field}
                             onChange={(e) => setField(e.target.value)}
                         >
@@ -60,6 +62,7 @@ export default function MetricsPage() {
                         Период
                         <select
                             className="input"
+                            aria-label="Период"
                             value={period}
                             onChange={(e) => setPeriod(e.target.value)}
                         >

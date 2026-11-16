@@ -17,7 +17,7 @@ docker compose --profile demo up --build -d --wait
 - `backend/` — REST API на FastAPI и слой хранения данных на SQLAlchemy + SQLite.
 - `mock-data/` — генератор тестовых отчётов, имитирующий работу агента.
 - `contracts/` — примеры и описание формата данных между компонентами.
-- `frontend/` — заготовка клиентской части.
+- `frontend/` — React-интерфейс мониторинга, топология и импорт JSON.
 - `docs/` — документация по архитектуре и базе данных.
 
 Подробности: [архитектура проекта](docs/ARCHITECTURE.md) и [слой базы данных](docs/DATABASE.md).
@@ -67,6 +67,6 @@ python -m pytest
 ## Текущее состояние
 
 GET API читает SQLite. Работают приём отчётов, загрузка JSON, heartbeat, история доступности, базовые алерты и очистка истории.
-Frontend и Docker Compose ещё предстоит добавить.
+Совместный запуск frontend, backend и генератора описан в [инструкции Docker](docs/DOCKER_GUIDE_RU.md).
 
 Подробный запуск Windows, проверки и задачи команды: [STATUS_AND_RUN](docs/STATUS_AND_RUN.md).

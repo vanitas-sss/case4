@@ -171,6 +171,7 @@ export default function TopologyPage() {
                     Сервер
                     <select
                         className="input"
+                        aria-label="Сервер топологии"
                         value={host}
                         onChange={(e) => setHost(e.target.value)}
                     >
