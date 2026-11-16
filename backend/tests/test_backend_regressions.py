@@ -61,12 +61,18 @@ def test_stale_container_status_consistent_in_all_views(
     assert client.get("/api/v1/containers").json()[0]["status"] == "running"
 
 
-def test_dead_container_count_matches_alert(client):
+def test_dead_container_count_matches_alert(client, api_session_factory):
+    from app.models.container import Container
+    from app.workers.monitor import check_stale_hosts
+
     report = copy.deepcopy(EXAMPLE)
     report[0]["containers"][0]["status"] = "dead"
     client.post("/api/v1/ingest", json=report)
     assert client.get("/api/v1/summary").json()["containers_stopped"] == 1
-    assert (
-        client.get("/api/v1/alerts?status=active").json()[0]["rule"]
-        == "container_stopped"
-    )
+    assert client.get("/api/v1/alerts?status=active").json() == []
+    with api_session_factory() as db:
+        container = db.query(Container).one()
+        container.stopped_since = utc_now_naive() - timedelta(seconds=11)
+        db.commit()
+        check_stale_hosts(db)
+    assert client.get("/api/v1/alerts?status=active").json()[0]["rule"] == "container_stopped"

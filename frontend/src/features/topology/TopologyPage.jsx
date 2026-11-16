@@ -28,6 +28,19 @@ function NetworkGraph({ data }) {
                 Нажмите на узел, чтобы увидеть его параметры. Расположение вычисляется для просмотра
                 и не меняет данные источника.
             </p>
+            <div className="topology-legend" aria-label="Обозначения состояний">
+                {[
+                    ['ok', 'В сети'],
+                    ['warn', 'Задержка'],
+                    ['crit', 'Проблема'],
+                    ['off', 'Нет данных'],
+                ].map(([tone, label]) => (
+                    <span key={tone}>
+                        <i className={`dot ${tone}`} />
+                        {label}
+                    </span>
+                ))}
+            </div>
             <div className="network-scroll">
                 <svg
                     viewBox={`0 0 850 ${height}`}
@@ -49,9 +62,10 @@ function NetworkGraph({ data }) {
                                     stroke={
                                         selected === link.source || selected === link.target
                                             ? '#E8B04A'
-                                            : '#666'
+                                            : '#888'
                                     }
-                                    strokeWidth="2"
+                                    strokeWidth={1.5 + (link.load ?? 0) / 25}
+                                    opacity={0.45 + (link.load ?? 0) / 200}
                                 >
                                     <title>
                                         {link.type}: {link.source} → {link.target}
@@ -161,28 +175,45 @@ function NetworkGraph({ data }) {
 
 export default function TopologyPage() {
     const [host, setHost] = useState('')
+    const [type, setType] = useState('')
     const hosts = useHosts(),
-        topology = useTopology({ host_id: host })
+        topology = useTopology({ host_id: host, type })
     return (
         <>
             <PageHeader title="Топология" subtitle="Узлы и связи из отчётов источников" />
             <div className="card">
-                <label>
-                    Сервер
-                    <select
-                        className="input"
-                        aria-label="Сервер топологии"
-                        value={host}
-                        onChange={(e) => setHost(e.target.value)}
-                    >
-                        <option value="">Все серверы</option>
-                        {(hosts.data ?? []).map((row) => (
-                            <option key={row.id} value={row.id}>
-                                {row.name}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+                <div className="topology-controls">
+                    <label className="filter-field">
+                        Сервер
+                        <select
+                            className="input"
+                            aria-label="Сервер топологии"
+                            value={host}
+                            onChange={(e) => setHost(e.target.value)}
+                        >
+                            <option value="">Все серверы</option>
+                            {(hosts.data ?? []).map((row) => (
+                                <option key={row.id} value={row.id}>
+                                    {row.name}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className="filter-field">
+                        Тип узла
+                        <select
+                            className="input"
+                            aria-label="Тип узла топологии"
+                            value={type}
+                            onChange={(event) => setType(event.target.value)}
+                        >
+                            <option value="">Все типы</option>
+                            <option value="server">Серверы</option>
+                            <option value="container">Контейнеры</option>
+                            <option value="network">Сети</option>
+                        </select>
+                    </label>
+                </div>
                 <Query
                     q={topology}
                     empty={(data) => !data?.nodes?.length}

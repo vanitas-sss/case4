@@ -10,8 +10,10 @@ const NAV = [
             ['/hosts', 'Серверы', 'servers', 'attn'],
             ['/containers', 'Контейнеры', 'containers'],
             ['/metrics', 'Метрики', 'metrics'],
+            ['/availability', 'Доступность', 'check'],
             ['/topology', 'Топология', 'servers'],
-            ['/events', 'События', 'clock', 'crit'],
+            ['/events', 'События', 'clock'],
+            ['/alerts', 'Оповещения', 'bell', 'crit'],
         ],
     ],
     [

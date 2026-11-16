@@ -26,9 +26,10 @@ def cleanup_old_records(
         .filter(Metric.timestamp < cutoff)
         .delete(synchronize_session=False)
     )
+    event_cutoff = current_time - timedelta(days=30)
     deleted_events = (
         db.query(Event)
-        .filter(Event.timestamp < cutoff)
+        .filter(Event.timestamp < event_cutoff)
         .delete(synchronize_session=False)
     )
     deleted_checks = (

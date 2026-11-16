@@ -26,7 +26,7 @@ export default function MetricsPage() {
         <>
             <PageHeader title="Метрики" subtitle="История измерений" />
             <div className="stack">
-                <div className="card filters row">
+                <div className="card filters metrics-filters">
                     <label>
                         Источник
                         <select

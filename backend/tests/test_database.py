@@ -180,9 +180,9 @@ def test_cleanup_removes_old_history_and_keeps_recent_records(db_session):
         now=datetime.now(UTC),
     )
 
-    assert result == {"metrics": 1, "events": 1, "availability_checks": 1}
+    assert result == {"metrics": 1, "events": 0, "availability_checks": 1}
     assert db_session.query(Metric).filter(Metric.host_id == host_id).count() == 1
-    assert db_session.query(Event).filter(Event.host_id == host_id).count() == 1
+    assert db_session.query(Event).filter(Event.host_id == host_id).count() == 2
     assert (
         db_session.query(IngestReport)
         .filter(IngestReport.source_id == "old-source")
@@ -422,7 +422,8 @@ def test_out_of_order_report_does_not_overwrite_newer_state(db_session):
     assert host.status == "online"
     assert host.last_seen > newer.timestamp.replace(tzinfo=None)
     assert max(m.timestamp for m in metrics) == newer.timestamp.replace(tzinfo=None)
-    assert len(metrics) == 2
+    assert len(metrics) == 3
+    assert min(metric.timestamp for metric in metrics) == report.timestamp.replace(tzinfo=None)
     assert max(metric.timestamp for metric in metrics) == newer.timestamp.replace(
         tzinfo=None
     )
@@ -462,7 +463,7 @@ def test_missing_status_does_not_reset_known_host_or_container_status(db_session
     host = db_session.query(Host).filter(Host.id == host_id).one()
     container = db_session.query(Container).filter(Container.host_id == host_id).one()
 
-    assert host.status == "offline"
+    assert host.status == "online"
     assert container.status == "running"
 
 
@@ -603,18 +604,19 @@ def test_cpu_alert_is_opened_and_resolved_when_metric_recovers(db_session):
     )
 
 
-def test_offline_host_creates_critical_alert(db_session):
+def test_reported_offline_status_does_not_create_alert(db_session):
     report = _example_report()
     report.host.status = "offline"
     host_id = ingest_service.process(db_session, report)
 
-    alert = (
+    host = db_session.get(Host, host_id)
+    assert host.status == "online"
+    assert (
         db_session.query(Alert)
         .filter(Alert.host_id == host_id, Alert.rule == "host_offline")
-        .one()
+        .count()
+        == 0
     )
-    assert alert.status == "active"
-    assert alert.severity == "critical"
 
 
 def test_heartbeat_worker_marks_host_offline_and_ingest_resolves_alert(db_session):

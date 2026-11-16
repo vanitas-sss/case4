@@ -618,3 +618,211 @@ summary {
     color: var(--crit);
     border-color: var(--crit);
 }
+
+.filter-field {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    min-width: 0;
+}
+.filter-field .input,
+.filters label .input {
+    width: 100%;
+    min-height: 40px;
+}
+.events-filters,
+.metrics-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 160px) minmax(0, 150px) minmax(220px, 1fr);
+    align-items: end;
+}
+.metrics-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.events-filters label,
+.metrics-filters label {
+    min-width: 0;
+}
+.topology-controls {
+    display: flex;
+    align-items: end;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.topology-controls .filter-field {
+    width: min(240px, 100%);
+}
+@media (max-width: 800px) {
+    .events-filters,
+    .metrics-filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .events-filters label:last-child {
+        grid-column: 1 / -1;
+    }
+}
+@media (max-width: 500px) {
+    .events-filters,
+    .metrics-filters {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .events-filters label:last-child {
+        grid-column: auto;
+    }
+    .topology-controls .filter-field {
+        width: 100%;
+    }
+}
+
+.availability-controls {
+    display: flex;
+    align-items: end;
+    margin-bottom: 20px;
+}
+.availability-controls .filter-field {
+    width: min(180px, 100%);
+}
+.uptime-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 160px;
+}
+.uptime-track {
+    flex: 1;
+    height: 7px;
+    min-width: 72px;
+    background: var(--surface2);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.uptime-track > i {
+    display: block;
+    height: 100%;
+    background: var(--ok);
+}
+.uptime-cell > span {
+    min-width: 64px;
+    font: 12px var(--mono);
+    text-align: right;
+}
+
+.hosts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+.host-card {
+    padding: 20px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+.host-card.is-offline {
+    border-color: var(--crit);
+}
+.host-card-title {
+    gap: 12px;
+}
+.host-name {
+    font-size: 17px;
+    font-weight: 600;
+}
+.host-ip {
+    color: var(--text2);
+    margin: 6px 0 18px;
+    font: 12px var(--mono);
+}
+.host-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.host-metric {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+}
+.host-metric > span {
+    color: var(--text2);
+    font-size: 12px;
+}
+.host-card-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding-top: 16px;
+    margin-top: 18px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text2);
+}
+
+.container-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: end;
+    margin-bottom: 20px;
+}
+.container-filters .filter-field {
+    width: min(220px, 100%);
+}
+.container-group + .container-group {
+    margin-top: 24px;
+}
+.container-group > h2 {
+    margin-bottom: 14px;
+}
+.container-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+    gap: 16px;
+}
+.container-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    padding: 18px;
+    min-width: 0;
+}
+.container-card-title {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+}
+.container-card-title .link-btn {
+    font-weight: 600;
+}
+.container-card .kv {
+    padding: 8px 0;
+    font-size: 12px;
+}
+.container-card .kv:last-child {
+    border: 0;
+}
+.container-card .kv > span {
+    max-width: 70%;
+}
+.container-card.unknown {
+    opacity: 0.7;
+}
+
+.topology-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    color: var(--text2);
+    font-size: 12px;
+    padding: 0 0 12px;
+}
+.topology-legend > span {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}

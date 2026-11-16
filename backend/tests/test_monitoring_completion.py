@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 from app.core.config import settings
 from app.core.time import utc_now_naive
-from app.models import Alert, AvailabilityCheck, Host
+from app.models import Alert, AvailabilityCheck, Container, Host
 from app.services.dashboard_service import list_availability, list_topology
 from app.workers.monitor import check_stale_hosts
 
@@ -46,22 +46,27 @@ def test_heartbeat_uses_receipt_time_and_records_outage(client, api_session_fact
         assert next(n for n in nodes if n["type"] == "container")["status"] == "unknown"
 
 
-def test_stopped_container_alert_deduplicates_and_recovers(client):
+def test_stopped_container_alert_deduplicates_and_recovers(client, api_session_factory):
     reports = report_at()
     reports[0]["containers"][0]["status"] = "stopped"
     client.post("/api/v1/ingest", json=reports)
-    reports[0]["timestamp"] = report_at(1)[0]["timestamp"]
-    client.post("/api/v1/ingest", json=reports)
+    assert client.get("/api/v1/alerts?status=active").json() == []
+
+    with api_session_factory() as db:
+        container = db.query(Container).one()
+        container.stopped_since = utc_now_naive() - timedelta(seconds=12)
+        db.commit()
+        check_stale_hosts(db)
+        check_stale_hosts(db)
+
     alerts = client.get("/api/v1/alerts?status=active").json()
-    assert len([a for a in alerts if a["rule"] == "container_stopped"]) == 1
+    assert len([item for item in alerts if item["rule"] == "container_stopped"]) == 1
+
     reports[0]["timestamp"] = report_at(2)[0]["timestamp"]
     reports[0]["containers"][0]["status"] = "running"
     client.post("/api/v1/ingest", json=reports)
     assert client.get("/api/v1/alerts?status=active").json() == []
-    assert (
-        client.get("/api/v1/alerts?status=resolved").json()[0]["rule"]
-        == "container_stopped"
-    )
+    assert client.get("/api/v1/alerts?status=resolved").json()[0]["rule"] == "container_stopped"
 
 
 def test_import_contract_and_replay(client):

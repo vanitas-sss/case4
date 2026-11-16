@@ -6,8 +6,10 @@ from app.core.config import settings
 from app.core.time import to_utc_naive, utc_now_naive
 from app.db.session import SessionLocal
 from app.models.alert import Alert
+from app.models.container import Container
 from app.models.host import Host
 from app.repositories import availability_repo, events_repo
+from app.services.alert_service import evaluate_container
 from app.workers.cleanup import cleanup_old_records
 from sqlalchemy.orm import Session
 
@@ -34,7 +36,11 @@ def check_stale_hosts(db: Session, now: datetime | None = None) -> int:
             events_repo.create_event(
                 db,
                 host_id=host.id,
-                event_type="host_status_changed",
+                event_type={
+                    "warning": "host_warning",
+                    "offline": "host_offline",
+                    "online": "host_online",
+                }[target_status],
                 message=f"Статус сервера изменился: {previous} → {target_status}",
                 timestamp=current,
             )
@@ -72,6 +78,8 @@ def check_stale_hosts(db: Session, now: datetime | None = None) -> int:
                     message=f"{host.name} недоступен: превышен таймаут heartbeat",
                     timestamp=current,
                 )
+        for container in db.query(Container).filter(Container.host_id == host.id).all():
+            evaluate_container(db, host, container, now=current)
         availability_repo.add_check(
             db, host_id=host.id, is_online=host.status == "online", checked_at=current
         )

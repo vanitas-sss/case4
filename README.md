@@ -1,72 +1,52 @@
-# Запуск полной системы
+# MOTY · мониторинг ИТ-инфраструктуры
 
-Фронтенд, backend и генератор запускаются командой:
+Прототип кейса №4: приём JSON-отчётов, история CPU/RAM/диска, состояния серверов и контейнеров, топология, события и оповещения в веб-интерфейсе.
 
-```sh
+## Запуск
+
+Нужны Docker и Docker Compose.
+
+```bash
+docker compose up --build -d --wait
+```
+
+- Сайт: http://localhost:8080
+- API: http://localhost:8000/docs
+- Проверка: http://localhost:8000/api/v1/health
+
+Демонстрационные данные запускаются отдельно:
+
+```bash
 docker compose --profile demo up --build -d --wait
 ```
 
-Интерфейс: http://localhost:8080. [Подробный запуск, проверки и устранение проблем](docs/DOCKER_GUIDE_RU.md).
+Остановка: `docker compose --profile demo down`. Данные SQLite сохраняются в Docker volume.
 
-# Docker Network Mapper
+## Структура
 
-Система мониторинга Docker-инфраструктуры. Проект собирает сведения о хостах и контейнерах, сохраняет историю метрик и показывает связи между узлами сети.
+- `backend/` — FastAPI, SQLAlchemy, SQLite, heartbeat, оповещения.
+- `frontend/` — React, страницы мониторинга.
+- `mock-data/` — генератор тестовых отчётов и сценарий отказов. **Не агент.**
+- `contracts/` — формат входного JSON и примеры API.
+- `docs/` — краткие инструкции.
 
-## Из чего состоит проект
-
-- `backend/` — REST API на FastAPI и слой хранения данных на SQLAlchemy + SQLite.
-- `mock-data/` — генератор тестовых отчётов, имитирующий работу агента.
-- `contracts/` — примеры и описание формата данных между компонентами.
-- `frontend/` — React-интерфейс мониторинга, топология и импорт JSON.
-- `docs/` — документация по архитектуре и базе данных.
-
-Подробности: [архитектура проекта](docs/ARCHITECTURE.md) и [слой базы данных](docs/DATABASE.md).
-
-## Запуск backend
-
-Нужен Python 3.11 или новее.
-
-Откройте терминал в корневой папке проекта и выполните:
+## Проверки
 
 ```bash
 cd backend
 python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --reload
-```
-
-После запуска:
-- API: http://127.0.0.1:8000
-- Swagger: http://127.0.0.1:8000/docs
-- Проверка состояния: http://127.0.0.1:8000/api/v1/health
-
-Таблицы SQLite создаются при старте приложения. По умолчанию база находится в `backend/data/metrics.db`. Путь можно изменить через переменную окружения `DB_PATH`.
-
-## Отправка тестовых данных
-
-Оставьте backend запущенным. Откройте второй терминал в корневой папке проекта:
-
-```bash
-cd mock-data
-python -m pip install -r requirements.txt
-python generator.py
-```
-
-Генератор отправляет отчёты каждые пять секунд. Чтобы остановить его, нажмите `Ctrl+C`.
-
-Дополнительные режимы и сценарии описаны в [mock-data/README.md](mock-data/README.md).
-
-## Тесты
-
-Из папки `backend` выполните:
-
-```bash
-python -m pip install -r requirements.txt
 python -m pytest
 ```
 
-## Текущее состояние
+```bash
+cd frontend
+npm ci
+npm run lint
+npm run format:check
+npm test
+npm run build
+```
 
-GET API читает SQLite. Работают приём отчётов, загрузка JSON, heartbeat, история доступности, базовые алерты и очистка истории.
-Совместный запуск frontend, backend и генератора описан в [инструкции Docker](docs/DOCKER_GUIDE_RU.md).
+Дополнительно: [развёртывание](docs/DEPLOY.md), [подключение источников](docs/CONNECT_SOURCES.md), [демонстрация](docs/DEMO.md), [API](docs/API_V1.md).
 
-Подробный запуск Windows, проверки и задачи команды: [STATUS_AND_RUN](docs/STATUS_AND_RUN.md).
+Настоящий агент относится к кейсу №1 и здесь не разрабатывается. Его JSON-отчёт пока не получен: адаптер под неизвестный формат не заявляется готовым. Оповещения работают **только на сайте**, без Telegram.

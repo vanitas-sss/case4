@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAlerts, useHealth } from '../api'
 import Query from './Query'
 import { agoIso } from '../utils/time'
@@ -25,6 +26,14 @@ function Notifications() {
                     <Query q={query} emptyTitle="Активных тревог нет">
                         {(alerts) => (
                             <>
+                                <Link
+                                    className="link-btn"
+                                    to="/alerts"
+                                    onClick={() => setOpen(false)}
+                                >
+                                    Все оповещения
+                                </Link>
+                                {' · '}
                                 <button
                                     className="link-btn"
                                     onClick={() => setRead(alerts.map((row) => row.id))}

@@ -1,4 +1,3 @@
-from app.core.config import settings
 from app.core.time import to_utc_naive, utc_now_naive
 from app.models.ingest_report import IngestReport
 from app.models.metric import Metric
@@ -34,10 +33,28 @@ def process(db: Session, report: ReportIn) -> int:
             if previous_host is not None
             else None
         )
-        if (
-            latest_metric is not None
-            and normalized_timestamp <= latest_metric.timestamp
-        ):
+        if latest_metric is not None and normalized_timestamp <= latest_metric.timestamp:
+            if normalized_timestamp == latest_metric.timestamp:
+                return previous_host.id
+            db.add(
+                IngestReport(
+                    source_id=source_id,
+                    host_name=host_data["name"],
+                    timestamp=normalized_timestamp,
+                )
+            )
+            db.flush()
+            metrics_repo.add_metric(
+                db=db,
+                host_id=previous_host.id,
+                timestamp=timestamp,
+                cpu_percent=host_data.get("cpu_percent"),
+                memory_percent=host_data.get("memory_percent"),
+                disk_percent=host_data.get("disk_percent"),
+                net_rx_bytes=host_data.get("net_rx_bytes"),
+                net_tx_bytes=host_data.get("net_tx_bytes"),
+            )
+            db.commit()
             return previous_host.id
 
         db.add(
@@ -51,25 +68,7 @@ def process(db: Session, report: ReportIn) -> int:
 
         previous_host_status = previous_host.status if previous_host else None
 
-        reported_status = host_data.get("status")
-        if reported_status is not None:
-            host_status = reported_status
-        elif previous_host is None:
-            host_status = "online"
-        elif (
-            previous_host.status in {"offline", "warning"}
-            and previous_host.last_seen is not None
-        ):
-            stale_seconds = (
-                received_at - to_utc_naive(previous_host.last_seen)
-            ).total_seconds()
-            host_status = (
-                "online"
-                if stale_seconds >= settings.WARNING_AFTER
-                else previous_host.status
-            )
-        else:
-            host_status = previous_host.status
+        host_status = "online"
 
         host = hosts_repo.upsert_host(
             db=db,
@@ -97,11 +96,11 @@ def process(db: Session, report: ReportIn) -> int:
             events_repo.create_event(
                 db,
                 host_id=host.id,
-                event_type="host_status_changed",
+                event_type="host_online" if host.status == "online" else "host_offline",
                 message=(
                     f"Статус сервера изменился: {previous_host_status} → {host.status}"
                 ),
-                timestamp=timestamp,
+                timestamp=received_at,
             )
 
         for item in data.get("containers") or []:
@@ -139,13 +138,26 @@ def process(db: Session, report: ReportIn) -> int:
                     db,
                     host_id=host.id,
                     container_id=container.id,
-                    event_type="container_status_changed",
+                    event_type=(
+                        "container_started"
+                        if container.status == "running"
+                        else "container_stopped"
+                        if container.status in {"stopped", "exited", "dead"}
+                        else "container_status_changed"
+                    ),
                     message=(
                         f"Статус контейнера {container.name} изменился: "
                         f"{previous_container_status} → {container.status}"
                     ),
-                    timestamp=timestamp,
+                    timestamp=received_at,
                 )
+
+        reported_containers = {item["id"] for item in data.get("containers") or []}
+        for container in host.containers:
+            if container.docker_id not in reported_containers and container.status != "unknown":
+                container.status = "unknown"
+                container.stopped_since = None
+                evaluate_container(db, host, container)
 
         if previous_host is None:
             events_repo.create_event(
