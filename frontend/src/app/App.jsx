@@ -9,6 +9,7 @@ import SourcesPage from '../features/sources/SourcesPage'
 import TopologyPage from '../features/topology/TopologyPage'
 import DocsPage from '../features/docs/DocsPage'
 import AlertsPage from '../features/alerts/AlertsPage'
+import AvailabilityPage from '../features/availability/AvailabilityPage'
 
 const HostRedirect = () => <Navigate to={`/metrics?host=${useParams().id}`} replace />
 
@@ -23,6 +24,7 @@ export default function App() {
                 <Route path="/metrics" element={<MetricsPage />} />
                 <Route path="/events" element={<EventsPage />} />
                 <Route path="/alerts" element={<AlertsPage />} />
+                <Route path="/availability" element={<AvailabilityPage />} />
                 <Route path="/topology" element={<TopologyPage />} />
                 <Route path="/sources" element={<SourcesPage />} />
                 <Route path="/docs" element={<DocsPage />} />

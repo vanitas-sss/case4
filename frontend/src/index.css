@@ -674,3 +674,36 @@ summary {
         width: 100%;
     }
 }
+
+.availability-controls {
+    display: flex;
+    align-items: end;
+    margin-bottom: 20px;
+}
+.availability-controls .filter-field {
+    width: min(180px, 100%);
+}
+.uptime-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 160px;
+}
+.uptime-track {
+    flex: 1;
+    height: 7px;
+    min-width: 72px;
+    background: var(--surface2);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.uptime-track > i {
+    display: block;
+    height: 100%;
+    background: var(--ok);
+}
+.uptime-cell > span {
+    min-width: 64px;
+    font: 12px var(--mono);
+    text-align: right;
+}
