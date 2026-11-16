@@ -7,6 +7,8 @@ from app.api.v1 import (
     events,
     hosts,
     ingest,
+    metrics,
+    sources,
     summary,
     topology,
 )
@@ -14,6 +16,8 @@ from app.api.v1 import (
 api_router = APIRouter()
 
 api_router.include_router(ingest.router)
+api_router.include_router(metrics.router)
+api_router.include_router(sources.router)
 api_router.include_router(hosts.router)
 api_router.include_router(containers.router)
 api_router.include_router(topology.router)
