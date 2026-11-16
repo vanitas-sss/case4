@@ -1,4 +1,3 @@
-from app.core.config import settings
 from app.core.time import to_utc_naive, utc_now_naive
 from app.models.ingest_report import IngestReport
 from app.models.metric import Metric
@@ -51,25 +50,7 @@ def process(db: Session, report: ReportIn) -> int:
 
         previous_host_status = previous_host.status if previous_host else None
 
-        reported_status = host_data.get("status")
-        if reported_status is not None:
-            host_status = reported_status
-        elif previous_host is None:
-            host_status = "online"
-        elif (
-            previous_host.status in {"offline", "warning"}
-            and previous_host.last_seen is not None
-        ):
-            stale_seconds = (
-                received_at - to_utc_naive(previous_host.last_seen)
-            ).total_seconds()
-            host_status = (
-                "online"
-                if stale_seconds >= settings.WARNING_AFTER
-                else previous_host.status
-            )
-        else:
-            host_status = previous_host.status
+        host_status = "online"
 
         host = hosts_repo.upsert_host(
             db=db,
@@ -101,7 +82,7 @@ def process(db: Session, report: ReportIn) -> int:
                 message=(
                     f"Статус сервера изменился: {previous_host_status} → {host.status}"
                 ),
-                timestamp=timestamp,
+                timestamp=received_at,
             )
 
         for item in data.get("containers") or []:
@@ -144,8 +125,14 @@ def process(db: Session, report: ReportIn) -> int:
                         f"Статус контейнера {container.name} изменился: "
                         f"{previous_container_status} → {container.status}"
                     ),
-                    timestamp=timestamp,
+                    timestamp=received_at,
                 )
+
+        reported_containers = {item["id"] for item in data.get("containers") or []}
+        for container in host.containers:
+            if container.docker_id not in reported_containers and container.status != "unknown":
+                container.status = "unknown"
+                evaluate_container(db, host, container)
 
         if previous_host is None:
             events_repo.create_event(

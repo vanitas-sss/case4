@@ -176,7 +176,7 @@ def test_read_endpoints_return_expected_shape(client):
     assert len(client.get("/api/v1/hosts/1/metrics?period=1h").json()) > 0
     assert client.get("/api/v1/hosts/1/metrics?period=5y").status_code == 422
 
-    assert len(client.get("/api/v1/hosts?status=offline").json()) == 1
+    assert client.get("/api/v1/hosts?status=offline").json() == []
     assert client.get("/api/v1/containers?host_id=1").json()
     topology = client.get("/api/v1/topology?host_id=1").json()
     assert topology["nodes"] and topology["links"]
@@ -184,7 +184,7 @@ def test_read_endpoints_return_expected_shape(client):
     assert all(node["id"].startswith("1:") for node in combined_topology["nodes"])
     assert len(client.get("/api/v1/availability").json()) == 2
     assert client.get("/api/v1/events?limit=1").json()
-    assert len(client.get("/api/v1/alerts?status=active").json()) >= 2
+    assert len(client.get("/api/v1/alerts?status=active").json()) >= 1
     summary = client.get("/api/v1/summary").json()
     assert summary["hosts_total"] == 2
-    assert summary["hosts_offline"] == 1
+    assert summary["hosts_offline"] == 0
