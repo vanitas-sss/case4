@@ -45,5 +45,5 @@ npm test
 npm run build
 ```
 
-Дополнительно: [развёртывание](docs/DEPLOY.md), [подключение источников](docs/CONNECT_SOURCES.md), [демонстрация](docs/DEMO.md), [API](docs/API_V1.md).
+Дополнительно: [развёртывание](docs/DEPLOY.md), [подключение источников](docs/CONNECT_SOURCES.md), [демонстрация](docs/DEMO.md).
 
